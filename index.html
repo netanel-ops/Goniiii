@@ -204,6 +204,7 @@
         let ethPrice = 0;
         let botRunning = false;
         let botStopped = false;
+        let dashboardInitialized = false;
 
         const TOKENS = {
             'rain': {
@@ -285,20 +286,23 @@
 
         async function selectToken(tokenId) {
             currentToken = tokenId;
+            dashboardInitialized = false;
             document.getElementById('btn-rain').classList.remove('active');
             document.getElementById('btn-gems').classList.remove('active');
             document.getElementById(`btn-${tokenId === 'rain' ? 'rain' : 'gems'}`).classList.add('active');
             if (priceInterval) clearInterval(priceInterval);
-            await updateDashboard(tokenId);
-            priceInterval = setInterval(() => updateDashboard(tokenId), 5000);
+            await updateDashboard(tokenId, true);
+            priceInterval = setInterval(() => updateDashboard(tokenId, false), 5000);
         }
 
         function updateAmountDisplay() {
-            const usdAmount = document.getElementById('usdAmount').value;
+            const usdAmount = document.getElementById('usdAmount')?.value || 10;
             const ethAmount = parseFloat(usdAmount) / ethPrice;
             const tokenAmount = parseFloat(usdAmount) / currentPrice;
-            document.getElementById('ethEquivalent').textContent = 
-                `≈ ${ethAmount.toFixed(4)} ETH or ${tokenAmount.toFixed(2)} tokens`;
+            const elem = document.getElementById('ethEquivalent');
+            if (elem) {
+                elem.textContent = `≈ ${ethAmount.toFixed(4)} ETH or ${tokenAmount.toFixed(2)} tokens`;
+            }
         }
 
         async function getHoldings() {
@@ -325,7 +329,7 @@
             }
         }
 
-        async function updateDashboard(tokenId) {
+        async function updateDashboard(tokenId, fullRender = false) {
             const dashboard = document.getElementById('dashboard');
             dashboard.style.display = 'block';
             
@@ -357,120 +361,172 @@
 
                 const holdings = await getHoldings();
 
-                let holdingsHTML = '';
-                if (walletAddress) {
-                    if (holdings && holdings.needsSwitch) {
-                        holdingsHTML = `
-                            <div class="holdings">
-                                <h3>💼 Your Holdings</h3>
-                                <div class="wallet-notice">⚠️ Switch to ${config.chainName}</div>
-                            </div>
-                        `;
-                    } else if (holdings) {
-                        holdingsHTML = `
-                            <div class="holdings">
-                                <h3>💼 Your Holdings</h3>
-                                <div class="holdings-grid">
-                                    <div class="holding-card">
-                                        <div class="stat-label">${tokenName} Balance</div>
-                                        <div class="holding-value">${parseFloat(holdings.tokenBalance).toFixed(4)}</div>
-                                        <div class="stat-label" style="opacity: 0.6;">≈ $${(parseFloat(holdings.tokenBalance) * currentPrice).toFixed(2)}</div>
-                                    </div>
-                                    <div class="holding-card">
-                                        <div class="stat-label">ETH Balance</div>
-                                        <div class="holding-value">${parseFloat(holdings.ethBalance).toFixed(4)}</div>
-                                        <div class="stat-label" style="opacity: 0.6;">≈ $${(parseFloat(holdings.ethBalance) * ethPrice).toFixed(2)}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    }
+                // עדכון רק של מה שצריך להתעדכן
+                if (fullRender || !dashboardInitialized) {
+                    // רינדור מלא רק בפעם הראשונה או כשמחליפים טוקן
+                    renderFullDashboard(tokenName, config, change24h, volume24h, marketCap, holdings);
+                    dashboardInitialized = true;
+                } else {
+                    // עדכון חלקי - רק מחירים ויתרות
+                    updatePricesOnly(tokenName, change24h, volume24h, marketCap, holdings);
                 }
-
-                dashboard.innerHTML = `
-                    <div class="dashboard">
-                        <h2>${tokenName} Dashboard <span class="network-badge">⛓️ ${config.chainName}</span></h2>
-                        <div class="contract-address">
-                            <strong>Contract:</strong> ${config.address}
-                        </div>
-                        <div class="price-card">
-                            <div class="label">Current Price</div>
-                            <div class="price">$${currentPrice.toFixed(6)}</div>
-                            <div class="label" style="color: ${change24h >= 0 ? '#10b981' : '#ef4444'}">
-                                ${change24h >= 0 ? '▲' : '▼'} ${Math.abs(change24h).toFixed(2)}% (24h)
-                            </div>
-                        </div>
-                        ${holdingsHTML}
-                        <div class="stats">
-                            <div class="stat-card">
-                                <div class="stat-value">$${(volume24h / 1000000).toFixed(2)}M</div>
-                                <div class="stat-label">24h Volume</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-value">$${(marketCap / 1000000).toFixed(2)}M</div>
-                                <div class="stat-label">Market Cap</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-value">${new Date().toLocaleTimeString()}</div>
-                                <div class="stat-label">Last Update</div>
-                            </div>
-                        </div>
-                        
-                        <div class="bot-controls">
-                            <h3>🤖 Volume Bot</h3>
-                            ${!walletAddress ? '<div class="wallet-notice">⚠️ Connect wallet first</div>' : ''}
-                            <div class="input-group">
-                                <label>Amount per trade (USD)</label>
-                                <input type="number" id="usdAmount" step="0.01" value="10" placeholder="10.00" 
-                                    ${!walletAddress ? 'disabled' : ''} oninput="updateAmountDisplay()">
-                                <div class="eth-equivalent" id="ethEquivalent">≈ ${(10/ethPrice).toFixed(4)} ETH</div>
-                            </div>
-                            <div class="input-row">
-                                <div class="input-group">
-                                    <label>Cycles (כמות פעמים)</label>
-                                    <input type="number" id="cycles" min="1" value="5" ${!walletAddress ? 'disabled' : ''}>
-                                </div>
-                                <div class="input-group">
-                                    <label>Delay (שניות בין פעולות)</label>
-                                    <input type="number" id="delay" min="1" value="10" ${!walletAddress ? 'disabled' : ''}>
-                                </div>
-                            </div>
-                            <div class="input-group">
-                                <label>Bot Mode</label>
-                                <select id="botMode" ${!walletAddress ? 'disabled' : ''}>
-                                    <option value="both">BUY + SELL (Both)</option>
-                                    <option value="buy">BUY Only</option>
-                                    <option value="sell">SELL Only</option>
-                                </select>
-                            </div>
-                            <div id="botStatus" style="display: none;" class="bot-status"></div>
-                            <div class="trade-buttons">
-                                <button class="bot" onclick="startBot()" id="startBotBtn" ${!walletAddress ? 'disabled' : ''}>
-                                    🚀 START BOT
-                                </button>
-                                <button class="stop" onclick="stopBot()" id="stopBotBtn" disabled>
-                                    ⛔ STOP BOT
-                                </button>
-                            </div>
-                            <div id="botLog" class="bot-log" style="display: none;"></div>
-                        </div>
-                        
-                        <div class="trading-controls">
-                            <h3>💰 Manual Trading</h3>
-                            <div class="trade-buttons">
-                                <button class="buy" onclick="executeTrade('buy')" id="buyBtn" ${!walletAddress ? 'disabled' : ''}>
-                                    🟢 BUY ${tokenName}
-                                </button>
-                                <button class="sell" onclick="executeTrade('sell')" id="sellBtn" ${!walletAddress ? 'disabled' : ''}>
-                                    🔴 SELL ${tokenName}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
             } catch (error) {
                 dashboard.innerHTML = `<div class="dashboard"><p style="color: #ef4444;">Error: ${error.message}</p></div>`;
             }
+        }
+
+        function renderFullDashboard(tokenName, config, change24h, volume24h, marketCap, holdings) {
+            const dashboard = document.getElementById('dashboard');
+            
+            let holdingsHTML = '';
+            if (walletAddress) {
+                if (holdings && holdings.needsSwitch) {
+                    holdingsHTML = `
+                        <div class="holdings" id="holdingsSection">
+                            <h3>💼 Your Holdings</h3>
+                            <div class="wallet-notice">⚠️ Switch to ${config.chainName}</div>
+                        </div>
+                    `;
+                } else if (holdings) {
+                    holdingsHTML = `
+                        <div class="holdings" id="holdingsSection">
+                            <h3>💼 Your Holdings</h3>
+                            <div class="holdings-grid">
+                                <div class="holding-card">
+                                    <div class="stat-label">${tokenName} Balance</div>
+                                    <div class="holding-value" id="tokenBalance">${parseFloat(holdings.tokenBalance).toFixed(4)}</div>
+                                    <div class="stat-label" style="opacity: 0.6;" id="tokenBalanceUSD">≈ $${(parseFloat(holdings.tokenBalance) * currentPrice).toFixed(2)}</div>
+                                </div>
+                                <div class="holding-card">
+                                    <div class="stat-label">ETH Balance</div>
+                                    <div class="holding-value" id="ethBalance">${parseFloat(holdings.ethBalance).toFixed(4)}</div>
+                                    <div class="stat-label" style="opacity: 0.6;" id="ethBalanceUSD">≈ $${(parseFloat(holdings.ethBalance) * ethPrice).toFixed(2)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            dashboard.innerHTML = `
+                <div class="dashboard">
+                    <h2 id="dashTitle">${tokenName} Dashboard <span class="network-badge">⛓️ ${config.chainName}</span></h2>
+                    <div class="contract-address">
+                        <strong>Contract:</strong> ${config.address}
+                    </div>
+                    <div class="price-card">
+                        <div class="label">Current Price</div>
+                        <div class="price" id="currentPrice">$${currentPrice.toFixed(6)}</div>
+                        <div class="label" id="priceChange" style="color: ${change24h >= 0 ? '#10b981' : '#ef4444'}">
+                            ${change24h >= 0 ? '▲' : '▼'} ${Math.abs(change24h).toFixed(2)}% (24h)
+                        </div>
+                    </div>
+                    ${holdingsHTML}
+                    <div class="stats">
+                        <div class="stat-card">
+                            <div class="stat-value" id="volume24h">$${(volume24h / 1000000).toFixed(2)}M</div>
+                            <div class="stat-label">24h Volume</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="marketCap">$${(marketCap / 1000000).toFixed(2)}M</div>
+                            <div class="stat-label">Market Cap</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="lastUpdate">${new Date().toLocaleTimeString()}</div>
+                            <div class="stat-label">Last Update</div>
+                        </div>
+                    </div>
+                    
+                    <div class="bot-controls">
+                        <h3>🤖 Volume Bot</h3>
+                        ${!walletAddress ? '<div class="wallet-notice">⚠️ Connect wallet first</div>' : ''}
+                        <div class="input-group">
+                            <label>Amount per trade (USD)</label>
+                            <input type="number" id="usdAmount" step="0.01" value="10" placeholder="10.00" 
+                                ${!walletAddress ? 'disabled' : ''} oninput="updateAmountDisplay()">
+                            <div class="eth-equivalent" id="ethEquivalent">≈ ${(10/ethPrice).toFixed(4)} ETH</div>
+                        </div>
+                        <div class="input-row">
+                            <div class="input-group">
+                                <label>Cycles (כמות פעמים)</label>
+                                <input type="number" id="cycles" min="1" value="5" ${!walletAddress ? 'disabled' : ''}>
+                            </div>
+                            <div class="input-group">
+                                <label>Delay (שניות בין פעולות)</label>
+                                <input type="number" id="delay" min="1" value="10" ${!walletAddress ? 'disabled' : ''}>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Bot Mode</label>
+                            <select id="botMode" ${!walletAddress ? 'disabled' : ''}>
+                                <option value="both">BUY + SELL (Both)</option>
+                                <option value="buy">BUY Only</option>
+                                <option value="sell">SELL Only</option>
+                            </select>
+                        </div>
+                        <div id="botStatus" style="display: none;" class="bot-status"></div>
+                        <div class="trade-buttons">
+                            <button class="bot" onclick="startBot()" id="startBotBtn" ${!walletAddress ? 'disabled' : ''}>
+                                🚀 START BOT
+                            </button>
+                            <button class="stop" onclick="stopBot()" id="stopBotBtn" disabled>
+                                ⛔ STOP BOT
+                            </button>
+                        </div>
+                        <div id="botLog" class="bot-log" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="trading-controls">
+                        <h3>💰 Manual Trading</h3>
+                        <div class="trade-buttons">
+                            <button class="buy" onclick="executeTrade('buy')" id="buyBtn" ${!walletAddress ? 'disabled' : ''}>
+                                🟢 BUY ${tokenName}
+                            </button>
+                            <button class="sell" onclick="executeTrade('sell')" id="sellBtn" ${!walletAddress ? 'disabled' : ''}>
+                                🔴 SELL ${tokenName}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updatePricesOnly(tokenName, change24h, volume24h, marketCap, holdings) {
+            // עדכון מחירים בלי לגעת ב-inputs!
+            const priceElem = document.getElementById('currentPrice');
+            if (priceElem) priceElem.textContent = `$${currentPrice.toFixed(6)}`;
+
+            const changeElem = document.getElementById('priceChange');
+            if (changeElem) {
+                changeElem.style.color = change24h >= 0 ? '#10b981' : '#ef4444';
+                changeElem.textContent = `${change24h >= 0 ? '▲' : '▼'} ${Math.abs(change24h).toFixed(2)}% (24h)`;
+            }
+
+            const volumeElem = document.getElementById('volume24h');
+            if (volumeElem) volumeElem.textContent = `$${(volume24h / 1000000).toFixed(2)}M`;
+
+            const mcapElem = document.getElementById('marketCap');
+            if (mcapElem) mcapElem.textContent = `$${(marketCap / 1000000).toFixed(2)}M`;
+
+            const timeElem = document.getElementById('lastUpdate');
+            if (timeElem) timeElem.textContent = new Date().toLocaleTimeString();
+
+            // עדכון יתרות
+            if (holdings && !holdings.needsSwitch) {
+                const tokenBalElem = document.getElementById('tokenBalance');
+                if (tokenBalElem) tokenBalElem.textContent = parseFloat(holdings.tokenBalance).toFixed(4);
+
+                const tokenBalUSDElem = document.getElementById('tokenBalanceUSD');
+                if (tokenBalUSDElem) tokenBalUSDElem.textContent = `≈ $${(parseFloat(holdings.tokenBalance) * currentPrice).toFixed(2)}`;
+
+                const ethBalElem = document.getElementById('ethBalance');
+                if (ethBalElem) ethBalElem.textContent = parseFloat(holdings.ethBalance).toFixed(4);
+
+                const ethBalUSDElem = document.getElementById('ethBalanceUSD');
+                if (ethBalUSDElem) ethBalUSDElem.textContent = `≈ $${(parseFloat(holdings.ethBalance) * ethPrice).toFixed(2)}`;
+            }
+
+            updateAmountDisplay();
         }
 
         async function startBot() {
@@ -532,7 +588,7 @@
                 statusDiv.textContent = '⛔ Bot stopped';
             }
             
-            await updateDashboard(currentToken);
+            await updateDashboard(currentToken, false);
         }
 
         function stopBot() {
@@ -566,7 +622,6 @@
 
             if (!fromBot) {
                 const btn = document.getElementById(action === 'buy' ? 'buyBtn' : 'sellBtn');
-                const originalText = btn.textContent;
                 btn.disabled = true;
                 btn.textContent = action === 'buy' ? '⏳ Buying...' : '⏳ Selling...';
             } else {
@@ -590,7 +645,7 @@
                         amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
                     };
-                    const tx = await router.exactInputSingle(params, { value: amountInWei });
+                    const tx = await router.exactInputSingle(params, { value: amountInWei, gasLimit: 500000 });
                     await tx.wait();
                     if (fromBot) {
                         logBot(`✅ BUY complete: ${tx.hash.slice(0,10)}...`);
@@ -598,7 +653,7 @@
                         alert(`✅ Bought!\nTx: ${tx.hash}`);
                     }
                 } else {
-                    // SELL: Token -> WETH -> ETH (חזרה לארנק שלך!)
+                    // SELL: Token -> WETH -> ETH
                     const token = new ethers.Contract(config.address, ERC20_ABI, signer);
                     const tokenAmount = usdAmount / currentPrice;
                     const decimals = await token.decimals();
@@ -609,44 +664,43 @@
                         throw new Error('Insufficient token balance');
                     }
 
-                    // בדיקה אם צריך אישור - רק פעם אחת!
+                    // בדיקת אישור - רק פעם אחת!
                     const allowance = await token.allowance(walletAddress, config.router);
                     if (allowance.lt(amountIn)) {
                         if (fromBot) logBot('⏳ Approving tokens (one-time)...');
-                        // אישור אינסופי - לא נצטרך יותר!
-                        const approveTx = await token.approve(config.router, ethers.constants.MaxUint256);
+                        const approveTx = await token.approve(config.router, ethers.constants.MaxUint256, { gasLimit: 100000 });
                         await approveTx.wait();
-                        if (fromBot) logBot('✅ Approval granted for future trades');
+                        if (fromBot) logBot('✅ Approval granted');
                     }
 
-                    // מכירה: Token -> WETH
+                    // Token -> WETH
                     const wethAddress = WETH[config.chainId];
                     const params = {
                         tokenIn: config.address,
                         tokenOut: wethAddress,
                         fee: 10000,
-                        recipient: walletAddress, // WETH יגיע לארנק שלך
+                        recipient: walletAddress,
                         deadline: deadline,
                         amountIn: amountIn,
                         amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
                     };
-                    const swapTx = await router.exactInputSingle(params);
+                    const swapTx = await router.exactInputSingle(params, { gasLimit: 500000 });
                     await swapTx.wait();
-                    if (fromBot) logBot(`✅ Token -> WETH swap: ${swapTx.hash.slice(0,10)}...`);
+                    if (fromBot) logBot(`✅ Token -> WETH: ${swapTx.hash.slice(0,10)}...`);
 
-                    // המרה: WETH -> ETH (חזרה לארנק שלך!)
+                    // WETH -> ETH
                     const weth = new ethers.Contract(wethAddress, WETH_ABI, signer);
                     const wethBalance = await weth.balanceOf(walletAddress);
                     
                     if (wethBalance.gt(0)) {
-                        if (fromBot) logBot('⏳ Converting WETH -> ETH...');
-                        const withdrawTx = await weth.withdraw(wethBalance);
+                        if (fromBot) logBot('⏳ WETH -> ETH...');
+                        const withdrawTx = await weth.withdraw(wethBalance, { gasLimit: 100000 });
                         await withdrawTx.wait();
                         if (fromBot) {
-                            logBot(`✅ SELL complete! ETH back in wallet: ${withdrawTx.hash.slice(0,10)}...`);
+                            logBot(`✅ SELL complete! ${withdrawTx.hash.slice(0,10)}...`);
                         } else {
-                            alert(`✅ Sold and converted to ETH!\nSwap: ${swapTx.hash}\nWithdraw: ${withdrawTx.hash}`);
+                            alert(`✅ Sold!\nSwap: ${swapTx.hash}\nWithdraw: ${withdrawTx.hash}`);
                         }
                     }
                 }
@@ -662,7 +716,8 @@
                 if (!fromBot) {
                     const btn = document.getElementById(action === 'buy' ? 'buyBtn' : 'sellBtn');
                     btn.disabled = false;
-                    btn.textContent = action === 'buy' ? '🟢 BUY' : '�4 SELL';
+                    const tokenName = currentToken === 'rain' ? 'RAIN' : 'GEMS-VIP';
+                    btn.textContent = action === 'buy' ? `🟢 BUY ${tokenName}` : `🔴 SELL ${tokenName}`;
                 }
             }
         }
