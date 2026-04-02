@@ -25,7 +25,12 @@ function DashboardGEMS() {
     const fetchPrice = async () => {
       try {
         const res = await axios.get(
-          "https://api.coingecko.com/api/v3/simple/price?ids=gems-vip&vs_currencies=usd"
+          "https://pro-api.coingecko.com/api/v3/simple/price?ids=gems-vip&vs_currencies=usd",
+          {
+            headers: {
+              "x-cg-pro-api-key": "CG-Qa4xRCrDuHn2232ArjgSwA8g"
+            }
+          }
         );
         setPrice(res.data["gems-vip"]?.usd || 0);
       } catch (err) {

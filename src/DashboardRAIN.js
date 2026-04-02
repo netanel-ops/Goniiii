@@ -25,7 +25,12 @@ function DashboardRAIN() {
     const fetchPrice = async () => {
       try {
         const res = await axios.get(
-          "https://api.coingecko.com/api/v3/simple/price?ids=rain&vs_currencies=usd"
+          "https://pro-api.coingecko.com/api/v3/simple/price?ids=rain&vs_currencies=usd",
+          {
+            headers: {
+              "x-cg-pro-api-key": "CG-Qa4xRCrDuHn2232ArjgSwA8g"
+            }
+          }
         );
         setPrice(res.data.rain?.usd || 0);
       } catch (err) {
