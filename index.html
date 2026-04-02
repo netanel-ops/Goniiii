@@ -266,7 +266,10 @@
                     walletAddress = await signer.getAddress();
                     document.getElementById('wallet-status').innerHTML = 
                         `<span style="color: #10b981;">✓ ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}</span>`;
-                    if (currentToken) await updateDashboard(currentToken);
+                    if (currentToken) {
+                        dashboardInitialized = false; // כדי שיעשה רינדור מלא עם הארנק
+                        await updateDashboard(currentToken, true);
+                    }
                 } catch (error) {
                     alert('Failed to connect: ' + error.message);
                 }
@@ -527,6 +530,25 @@
 
                 const ethBalUSDElem = document.getElementById('ethBalanceUSD');
                 if (ethBalUSDElem) ethBalUSDElem.textContent = `≈ $${(parseFloat(holdings.ethBalance) * ethPrice).toFixed(2)}`;
+            }
+
+            // עדכון מצב כפתורים אם ארנק מחובר
+            if (walletAddress) {
+                const buyBtn = document.getElementById('buyBtn');
+                const sellBtn = document.getElementById('sellBtn');
+                const startBtn = document.getElementById('startBotBtn');
+                const usdInput = document.getElementById('usdAmount');
+                const cyclesInput = document.getElementById('cycles');
+                const delayInput = document.getElementById('delay');
+                const modeSelect = document.getElementById('botMode');
+                
+                if (buyBtn && buyBtn.disabled) buyBtn.disabled = false;
+                if (sellBtn && sellBtn.disabled) sellBtn.disabled = false;
+                if (startBtn && startBtn.disabled && !botRunning) startBtn.disabled = false;
+                if (usdInput && usdInput.disabled) usdInput.disabled = false;
+                if (cyclesInput && cyclesInput.disabled) cyclesInput.disabled = false;
+                if (delayInput && delayInput.disabled) delayInput.disabled = false;
+                if (modeSelect && modeSelect.disabled) modeSelect.disabled = false;
             }
 
             updateAmountDisplay();
