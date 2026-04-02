@@ -1,14 +1,237 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta name="description" content="Volume Bot - RAIN & GEMS-VIP Trading Dashboard" />
-    <title>Volume Bot</title>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volume Bot - RAIN & GEMS-VIP Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+        }
+        h1 { font-size: 2rem; }
+        .emoji { font-size: 2.5rem; margin-right: 10px; }
+        .token-selector {
+            text-align: center;
+            margin: 40px 0;
+        }
+        .buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        button {
+            background: #5b21b6;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: #7c3aed;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(124, 58, 237, 0.4);
+        }
+        button.active {
+            background: #7c3aed;
+            box-shadow: 0 0 30px rgba(124, 58, 237, 0.6);
+        }
+        .dashboard {
+            background: rgba(26, 31, 58, 0.8);
+            border-radius: 16px;
+            padding: 40px;
+            margin-top: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(124, 58, 237, 0.2);
+        }
+        .price-card {
+            background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%);
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .price {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .label {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #7c3aed;
+        }
+        .stat-label {
+            margin-top: 8px;
+            opacity: 0.7;
+        }
+        .connect-prompt {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+        .loading { animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><span class="emoji">🐙</span>Volume Bot Dashboard</h1>
+            <div id="wallet-status">
+                <button onclick="connectWallet()">Connect Wallet</button>
+            </div>
+        </header>
+
+        <div class="token-selector">
+            <h2>Select Token</h2>
+            <div class="buttons">
+                <button id="btn-rain" onclick="selectToken('rain')">RAIN</button>
+                <button id="btn-gems" onclick="selectToken('gems-vip')">GEMS-VIP</button>
+            </div>
+        </div>
+
+        <div id="dashboard" style="display: none;"></div>
+    </div>
+
+    <script>
+        let currentToken = null;
+        let priceInterval = null;
+
+        async function connectWallet() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    document.getElementById('wallet-status').innerHTML = 
+                        `<span style="color: #10b981;">✓ ${accounts[0].slice(0,6)}...${accounts[0].slice(-4)}</span>`;
+                } catch (error) {
+                    alert('Failed to connect wallet: ' + error.message);
+                }
+            } else {
+                alert('Please install MetaMask to use this app');
+            }
+        }
+
+        async function selectToken(tokenId) {
+            currentToken = tokenId;
+            document.getElementById('btn-rain').classList.remove('active');
+            document.getElementById('btn-gems').classList.remove('active');
+            document.getElementById(`btn-${tokenId === 'rain' ? 'rain' : 'gems'}`).classList.add('active');
+            
+            if (priceInterval) clearInterval(priceInterval);
+            await updateDashboard(tokenId);
+            priceInterval = setInterval(() => updateDashboard(tokenId), 5000);
+        }
+
+        async function updateDashboard(tokenId) {
+            const dashboard = document.getElementById('dashboard');
+            dashboard.style.display = 'block';
+            
+            try {
+                const response = await fetch(
+                    `https://pro-api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true`,
+                    {
+                        headers: {
+                            'x-cg-pro-api-key': 'CG-Qa4xRCrDuHn2232ArjgSwA8g'
+                        }
+                    }
+                );
+                const data = await response.json();
+                const tokenData = data[tokenId];
+                
+                if (!tokenData) throw new Error('Token data not available');
+
+                const tokenName = tokenId === 'rain' ? 'RAIN' : 'GEMS-VIP';
+                const price = tokenData.usd || 0;
+                const change24h = tokenData.usd_24h_change || 0;
+                const volume24h = tokenData.usd_24h_vol || 0;
+                const marketCap = tokenData.usd_market_cap || 0;
+
+                dashboard.innerHTML = `
+                    <div class="dashboard">
+                        <h2>${tokenName} Dashboard</h2>
+                        <div class="price-card">
+                            <div class="label">Current Price</div>
+                            <div class="price">$${price.toFixed(6)}</div>
+                            <div class="label" style="color: ${change24h >= 0 ? '#10b981' : '#ef4444'}">
+                                ${change24h >= 0 ? '▲' : '▼'} ${Math.abs(change24h).toFixed(2)}% (24h)
+                            </div>
+                        </div>
+                        <div class="stats">
+                            <div class="stat-card">
+                                <div class="stat-value">$${(volume24h / 1000000).toFixed(2)}M</div>
+                                <div class="stat-label">24h Volume</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">$${(marketCap / 1000000).toFixed(2)}M</div>
+                                <div class="stat-label">Market Cap</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${new Date().toLocaleTimeString()}</div>
+                                <div class="stat-label">Last Update</div>
+                            </div>
+                        </div>
+                        <div class="connect-prompt">
+                            <h3>💎 Volume Bot Features</h3>
+                            <p style="margin-top: 15px; opacity: 0.8;">Connect your wallet to access automated trading and volume generation tools</p>
+                            <div style="margin-top: 20px;">
+                                <button onclick="connectWallet()">Connect MetaMask</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                dashboard.innerHTML = `
+                    <div class="dashboard">
+                        <p style="color: #ef4444;">Failed to load price data: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Auto-select RAIN on load
+        window.addEventListener('load', () => {
+            selectToken('rain');
+        });
+    </script>
+</body>
 </html>
