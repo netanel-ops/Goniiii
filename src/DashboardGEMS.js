@@ -4,8 +4,8 @@ import BotEngine from "./BotEngine";
 import SwapButton from "./SwapButton";
 import { useSigner } from "wagmi";
 
-// TODO: Replace with actual GEMS-VIP token address
-const GEMS_TOKEN_ADDRESS = "0x...";
+// GEMS-VIP token address (verify this address!)
+const GEMS_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000"; // TODO: Replace with real address
 const UNISWAP_ROUTER_ADDRESS = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"; // Uniswap V3 Router
 
 function DashboardGEMS() {
