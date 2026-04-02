@@ -1,739 +1,918 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Volume Bot - RAIN & GEMS-VIP Dashboard</title>
+    <title>בוט נפח מסחר - RAIN & GEMS-VIP</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
-            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
+            direction: rtl;
         }
-        .container { max-width: 1200px; margin: 0 auto; }
-        header {
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .wallet-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .connect-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .connect-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .connect-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .wallet-info {
+            display: none;
+            margin-top: 15px;
+        }
+        
+        .wallet-info.active {
+            display: block;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: #666;
+        }
+        
+        .info-value {
+            color: #333;
+            font-family: monospace;
+        }
+        
+        .token-section {
+            margin-bottom: 25px;
+        }
+        
+        .token-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 40px;
-            padding: 20px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 12px;
-        }
-        h1 { font-size: 2rem; }
-        .emoji { font-size: 2.5rem; margin-right: 10px; }
-        .token-selector { text-align: center; margin: 40px 0; }
-        .buttons { display: flex; gap: 20px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
-        button {
-            background: #5b21b6;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border: none;
-            padding: 15px 30px;
+            border-radius: 10px 10px 0 0;
+        }
+        
+        .token-name {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        .token-chain {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+        
+        .token-body {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 0 0 10px 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-weight: bold;
+        }
+        
+        input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
             border-radius: 8px;
-            font-size: 18px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="number"]:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .mode-selector {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .mode-btn {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .mode-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .control-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .start-btn, .stop-btn {
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
             cursor: pointer;
             transition: all 0.3s;
         }
-        button:hover:not(:disabled) {
-            background: #7c3aed;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(124, 58, 237, 0.4);
+        
+        .start-btn {
+            background: #10b981;
+            color: white;
         }
-        button.active {
-            background: #7c3aed;
-            box-shadow: 0 0 30px rgba(124, 58, 237, 0.6);
+        
+        .start-btn:hover {
+            background: #059669;
         }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        button.buy { background: #10b981; }
-        button.buy:hover:not(:disabled) { background: #059669; }
-        button.sell { background: #ef4444; }
-        button.sell:hover:not(:disabled) { background: #dc2626; }
-        button.bot { background: #f59e0b; font-size: 20px; padding: 18px 40px; }
-        button.bot:hover:not(:disabled) { background: #d97706; }
-        button.stop { background: #dc2626; }
-        .dashboard {
-            background: rgba(26, 31, 58, 0.8);
-            border-radius: 16px;
-            padding: 40px;
+        
+        .start-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .stop-btn {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .stop-btn:hover {
+            background: #dc2626;
+        }
+        
+        .stop-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .status-section {
             margin-top: 30px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(124, 58, 237, 0.2);
-        }
-        .price-card {
-            background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%);
-            padding: 30px;
-            border-radius: 12px;
-            text-align: center;
-            margin: 20px 0;
-        }
-        .price { font-size: 3rem; font-weight: bold; margin: 10px 0; }
-        .label { font-size: 1.2rem; opacity: 0.9; }
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-top: 30px;
-        }
-        .stat-card {
-            background: rgba(255,255,255,0.05);
             padding: 20px;
+            background: #f8f9fa;
             border-radius: 10px;
-            text-align: center;
         }
-        .stat-value { font-size: 1.8rem; font-weight: bold; color: #7c3aed; }
-        .stat-label { margin-top: 8px; opacity: 0.7; }
-        .trading-controls, .holdings, .bot-controls {
-            background: rgba(255,255,255,0.03);
-            border-radius: 12px;
-            padding: 30px;
-            margin-top: 30px;
-        }
-        .input-group { margin: 20px 0; }
-        .input-group label { display: block; margin-bottom: 8px; font-weight: 500; }
-        .input-group input, .input-group select {
-            width: 100%;
-            padding: 12px;
-            border-radius: 6px;
-            border: 1px solid rgba(124, 58, 237, 0.3);
-            background: rgba(255,255,255,0.05);
-            color: #fff;
-            font-size: 16px;
-        }
-        .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .trade-buttons { display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap; }
-        .trade-buttons button { flex: 1; min-width: 200px; }
-        .wallet-notice {
-            background: rgba(251, 191, 36, 0.1);
-            border: 1px solid #f59e0b;
-            color: #fbbf24;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 15px 0;
-            text-align: center;
-        }
-        .network-badge {
-            background: rgba(124, 58, 237, 0.3);
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            margin-left: 10px;
-        }
-        .holdings-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-        .holding-card {
-            background: rgba(124, 58, 237, 0.1);
-            border: 1px solid rgba(124, 58, 237, 0.3);
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        .holding-value {
-            font-size: 2rem;
+        
+        .status-header {
+            font-size: 18px;
             font-weight: bold;
-            color: #7c3aed;
-            margin: 10px 0;
+            color: #667eea;
+            margin-bottom: 15px;
         }
-        .contract-address {
-            background: rgba(255,255,255,0.03);
-            padding: 12px;
-            border-radius: 6px;
-            font-family: monospace;
-            font-size: 0.9rem;
-            margin: 15px 0;
-            word-break: break-all;
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
         }
-        .eth-equivalent {
-            margin-top: 8px;
-            color: #7c3aed;
-            font-size: 0.9rem;
-        }
-        .bot-log {
-            background: rgba(0,0,0,0.3);
-            border: 1px solid rgba(124, 58, 237, 0.2);
-            border-radius: 8px;
+        
+        .stat-card {
+            background: white;
             padding: 15px;
-            margin-top: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .log-container {
             max-height: 300px;
             overflow-y: auto;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
             font-family: monospace;
-            font-size: 0.85rem;
+            font-size: 12px;
         }
-        .bot-log div { padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .bot-status {
-            background: rgba(124, 58, 237, 0.2);
-            border: 1px solid #7c3aed;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-            font-weight: bold;
-            margin: 15px 0;
+        
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid #f0f0f0;
         }
-        .success-banner {
-            background: rgba(16, 185, 129, 0.2);
-            border: 1px solid #10b981;
+        
+        .log-entry.success {
             color: #10b981;
-            padding: 15px;
+        }
+        
+        .log-entry.error {
+            color: #ef4444;
+        }
+        
+        .log-entry.info {
+            color: #3b82f6;
+        }
+        
+        .price-display {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background: white;
             border-radius: 8px;
-            margin: 15px 0;
+            margin-bottom: 15px;
+        }
+        
+        .price-item {
             text-align: center;
+        }
+        
+        .price-label {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .price-value {
+            font-size: 18px;
             font-weight: bold;
+            color: #667eea;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1><span class="emoji">🤖</span> Volume Bot</h1>
-            <button onclick="connectWallet()" id="wallet-btn">📲 Connect Wallet</button>
-            <div id="wallet-status"></div>
-        </header>
-        <div class="success-banner">
-            ✨ Using 1inch API - Only 1 signature per trade! ✨
-        </div>
-        <div class="token-selector">
-            <h2>Select Token</h2>
-            <div class="buttons">
-                <button id="btn-rain" onclick="selectToken('rain')">⚡ RAIN</button>
-                <button id="btn-gems" onclick="selectToken('gems-vip')">💎 GEMS-VIP</button>
+        <h1>🤖 בוט נפח מסחר אוטומטי</h1>
+        <p class="subtitle">RAIN (Arbitrum) & GEMS-VIP (Ethereum)</p>
+        
+        <div class="wallet-section">
+            <button id="connectBtn" class="connect-btn">🔗 התחבר לארנק</button>
+            <div id="walletInfo" class="wallet-info">
+                <div class="info-row">
+                    <span class="info-label">כתובת ארנק:</span>
+                    <span class="info-value" id="walletAddress"></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">רשת נוכחית:</span>
+                    <span class="info-value" id="currentChain"></span>
+                </div>
             </div>
         </div>
-        <div id="dashboard" style="display: none;"></div>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <script>
-        let currentToken = null;
-        let priceInterval = null;
-        let walletAddress = null;
-        let signer = null;
-        let provider = null;
-        let currentPrice = 0;
-        let ethPrice = 0;
-        let botRunning = false;
-        let botStopped = false;
-        let dashboardInitialized = false;
 
-        const TOKENS = {
-            'rain': {
+        <div class="token-section">
+            <div class="token-header">
+                <div>
+                    <div class="token-name">RAIN 💧</div>
+                    <div class="token-chain">Arbitrum</div>
+                </div>
+            </div>
+            <div class="token-body">
+                <div class="price-display">
+                    <div class="price-item">
+                        <div class="price-label">מחיר</div>
+                        <div class="price-value" id="rainPrice">$0.00</div>
+                    </div>
+                    <div class="price-item">
+                        <div class="price-label">יתרה</div>
+                        <div class="price-value" id="rainBalance">0</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>כמות למסחר (RAIN):</label>
+                    <input type="number" id="rainAmount" value="1" step="0.1" min="0.01">
+                </div>
+            </div>
+        </div>
+
+        <div class="token-section">
+            <div class="token-header">
+                <div>
+                    <div class="token-name">GEMS-VIP 💎</div>
+                    <div class="token-chain">Ethereum</div>
+                </div>
+            </div>
+            <div class="token-body">
+                <div class="price-display">
+                    <div class="price-item">
+                        <div class="price-label">מחיר</div>
+                        <div class="price-value" id="gemsPrice">$0.00</div>
+                    </div>
+                    <div class="price-item">
+                        <div class="price-label">יתרה</div>
+                        <div class="price-value" id="gemsBalance">0</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>כמות למסחר (GEMS-VIP):</label>
+                    <input type="number" id="gemsAmount" value="1" step="0.1" min="0.01">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>מצב פעולה:</label>
+            <div class="mode-selector">
+                <button class="mode-btn active" data-mode="BOTH">שניהם</button>
+                <button class="mode-btn" data-mode="BUY">קנייה בלבד</button>
+                <button class="mode-btn" data-mode="SELL">מכירה בלבד</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>מספר מחזורים:</label>
+            <input type="number" id="cycles" value="10" min="1">
+        </div>
+
+        <div class="form-group">
+            <label>השהייה בין מסחרים (שניות):</label>
+            <input type="number" id="delay" value="30" min="5">
+        </div>
+
+        <div class="control-buttons">
+            <button id="startBtn" class="start-btn" disabled>▶️ התחל מסחר</button>
+            <button id="stopBtn" class="stop-btn" disabled>⏹️ עצור</button>
+        </div>
+
+        <div class="status-section">
+            <div class="status-header">📊 סטטיסטיקות</div>
+            <div class="status-grid">
+                <div class="stat-card">
+                    <div class="stat-label">מחזור נוכחי</div>
+                    <div class="stat-value" id="currentCycle">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">מסחרים מוצלחים</div>
+                    <div class="stat-value" id="successTrades">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">מסחרים כושלים</div>
+                    <div class="stat-value" id="failedTrades">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">נפח כולל (USD)</div>
+                    <div class="stat-value" id="totalVolume">$0</div>
+                </div>
+            </div>
+            
+            <div class="status-header">📝 יומן פעילות</div>
+            <div class="log-container" id="logContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            RAIN: {
                 address: '0x25118290e6a5f4139381d072181157035864099d',
+                chain: 'arbitrum',
                 chainId: 42161,
-                chainName: 'Arbitrum One'
+                rpcUrl: 'https://arb1.arbitrum.io/rpc',
+                router: '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506', // Sushiswap on Arbitrum
+                weth: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
+                coingeckoId: 'rain-token'
             },
-            'gems-vip': {
+            GEMS: {
                 address: '0x3010ccb5419f1ef26d40a7cd3f0d707a0fa127dc',
+                chain: 'ethereum',
                 chainId: 1,
-                chainName: 'Ethereum'
-            }
+                rpcUrl: 'https://eth.llamarpc.com',
+                router: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2
+                weth: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+                coingeckoId: 'gems-vip'
+            },
+            COINGECKO_API_KEY: 'CG-Qa4xRCrDuHn2232ArjgSwA8g'
         };
 
-        const ETH_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
-
-        const ERC20_ABI = [
-            'function balanceOf(address account) view returns (uint256)',
-            'function decimals() view returns (uint8)',
-            'function approve(address spender, uint256 amount) returns (bool)',
-            'function allowance(address owner, address spender) view returns (uint256)'
+        // Router ABI (minimal for swaps)
+        const ROUTER_ABI = [
+            {
+                "inputs": [
+                    {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+                    {"internalType": "uint256", "name": "amountOutMin", "type": "uint256"},
+                    {"internalType": "address[]", "name": "path", "type": "address[]"},
+                    {"internalType": "address", "name": "to", "type": "address"},
+                    {"internalType": "uint256", "name": "deadline", "type": "uint256"}
+                ],
+                "name": "swapExactTokensForTokens",
+                "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {"internalType": "uint256", "name": "amountOutMin", "type": "uint256"},
+                    {"internalType": "address[]", "name": "path", "type": "address[]"},
+                    {"internalType": "address", "name": "to", "type": "address"},
+                    {"internalType": "uint256", "name": "deadline", "type": "uint256"}
+                ],
+                "name": "swapExactETHForTokens",
+                "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
+                "stateMutability": "payable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+                    {"internalType": "uint256", "name": "amountOutMin", "type": "uint256"},
+                    {"internalType": "address[]", "name": "path", "type": "address[]"},
+                    {"internalType": "address", "name": "to", "type": "address"},
+                    {"internalType": "uint256", "name": "deadline", "type": "uint256"}
+                ],
+                "name": "swapExactTokensForETH",
+                "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
         ];
 
-        function logBot(message) {
-            const log = document.getElementById('botLog');
-            if (log) {
-                const time = new Date().toLocaleTimeString();
-                const entry = document.createElement('div');
-                entry.textContent = `[${time}] ${message}`;
-                log.insertBefore(entry, log.firstChild);
-                if (log.children.length > 20) log.removeChild(log.lastChild);
+        // ERC20 ABI
+        const ERC20_ABI = [
+            {
+                "constant": true,
+                "inputs": [{"name": "_owner", "type": "address"}],
+                "name": "balanceOf",
+                "outputs": [{"name": "balance", "type": "uint256"}],
+                "type": "function"
+            },
+            {
+                "constant": false,
+                "inputs": [
+                    {"name": "_spender", "type": "address"},
+                    {"name": "_value", "type": "uint256"}
+                ],
+                "name": "approve",
+                "outputs": [{"name": "", "type": "bool"}],
+                "type": "function"
+            },
+            {
+                "constant": true,
+                "inputs": [
+                    {"name": "_owner", "type": "address"},
+                    {"name": "_spender", "type": "address"}
+                ],
+                "name": "allowance",
+                "outputs": [{"name": "", "type": "uint256"}],
+                "type": "function"
+            },
+            {
+                "constant": true,
+                "inputs": [],
+                "name": "decimals",
+                "outputs": [{"name": "", "type": "uint8"}],
+                "type": "function"
             }
+        ];
+
+        // State
+        let web3;
+        let account;
+        let currentMode = 'BOTH';
+        let isRunning = false;
+        let currentCycle = 0;
+        let stats = {
+            success: 0,
+            failed: 0,
+            volume: 0
+        };
+        let prices = {
+            rain: 0,
+            gems: 0
+        };
+        let approvals = {
+            rain: false,
+            gems: false
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', init);
+
+        function init() {
+            setupEventListeners();
+            startPriceUpdates();
+        }
+
+        function setupEventListeners() {
+            document.getElementById('connectBtn').addEventListener('click', connectWallet);
+            document.getElementById('startBtn').addEventListener('click', startBot);
+            document.getElementById('stopBtn').addEventListener('click', stopBot);
+            
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentMode = e.target.dataset.mode;
+                    log(`מצב פעולה שונה ל: ${currentMode}`, 'info');
+                });
+            });
         }
 
         async function connectWallet() {
-            if (typeof window.ethereum !== 'undefined') {
-                try {
-                    provider = new ethers.providers.Web3Provider(window.ethereum);
-                    await provider.send('eth_requestAccounts', []);
-                    signer = provider.getSigner();
-                    walletAddress = await signer.getAddress();
-                    document.getElementById('wallet-status').innerHTML = 
-                        `<span style="color: #10b981;">✓ ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}</span>`;
-                    if (currentToken) {
-                        dashboardInitialized = false;
-                        await updateDashboard(currentToken, true);
-                    }
-                } catch (error) {
-                    alert('Failed to connect: ' + error.message);
-                }
-            } else {
-                alert('Please install MetaMask');
-            }
-        }
-
-        async function switchNetwork(chainId) {
             try {
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: '0x' + chainId.toString(16) }],
-                });
-                return true;
-            } catch (error) {
-                return false;
-            }
-        }
-
-        async function selectToken(tokenId) {
-            currentToken = tokenId;
-            dashboardInitialized = false;
-            document.getElementById('btn-rain').classList.remove('active');
-            document.getElementById('btn-gems').classList.remove('active');
-            document.getElementById(`btn-${tokenId === 'rain' ? 'rain' : 'gems'}`).classList.add('active');
-            if (priceInterval) clearInterval(priceInterval);
-            await updateDashboard(tokenId, true);
-            priceInterval = setInterval(() => updateDashboard(tokenId, false), 5000);
-        }
-
-        function updateAmountDisplay() {
-            const usdAmount = document.getElementById('usdAmount')?.value || 10;
-            const ethAmount = parseFloat(usdAmount) / ethPrice;
-            const tokenAmount = parseFloat(usdAmount) / currentPrice;
-            const elem = document.getElementById('ethEquivalent');
-            if (elem) {
-                elem.textContent = `≈ ${ethAmount.toFixed(4)} ETH or ${tokenAmount.toFixed(2)} tokens`;
-            }
-        }
-
-        async function getHoldings() {
-            if (!walletAddress || !provider) return null;
-            try {
-                const config = TOKENS[currentToken];
-                const network = await provider.getNetwork();
-                if (network.chainId !== config.chainId) return { needsSwitch: true };
-
-                const token = new ethers.Contract(config.address, ERC20_ABI, provider);
-                const [tokenBalance, ethBalance, decimals] = await Promise.all([
-                    token.balanceOf(walletAddress),
-                    provider.getBalance(walletAddress),
-                    token.decimals()
-                ]);
-
-                return {
-                    tokenBalance: ethers.utils.formatUnits(tokenBalance, decimals),
-                    ethBalance: ethers.utils.formatEther(ethBalance),
-                    needsSwitch: false
-                };
-            } catch (error) {
-                return null;
-            }
-        }
-
-        async function updateDashboard(tokenId, fullRender = false) {
-            const dashboard = document.getElementById('dashboard');
-            dashboard.style.display = 'block';
-            
-            try {
-                const [priceRes, ethPriceRes] = await Promise.all([
-                    fetch(
-                        `https://pro-api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true`,
-                        { headers: { 'x-cg-pro-api-key': 'CG-Qa4xRCrDuHn2232ArjgSwA8g' } }
-                    ),
-                    fetch(
-                        'https://pro-api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
-                        { headers: { 'x-cg-pro-api-key': 'CG-Qa4xRCrDuHn2232ArjgSwA8g' } }
-                    )
-                ]);
-
-                const data = await priceRes.json();
-                const ethData = await ethPriceRes.json();
-                const tokenData = data[tokenId];
-                if (!tokenData) throw new Error('Token data not available');
-
-                currentPrice = tokenData.usd || 0;
-                ethPrice = ethData.ethereum.usd || 0;
-
-                const config = TOKENS[tokenId];
-                const tokenName = tokenId === 'rain' ? 'RAIN' : 'GEMS-VIP';
-                const change24h = tokenData.usd_24h_change || 0;
-                const volume24h = tokenData.usd_24h_vol || 0;
-                const marketCap = tokenData.usd_market_cap || 0;
-
-                const holdings = await getHoldings();
-
-                if (fullRender || !dashboardInitialized) {
-                    renderFullDashboard(tokenName, config, change24h, volume24h, marketCap, holdings);
-                    dashboardInitialized = true;
-                } else {
-                    updatePricesOnly(tokenName, change24h, volume24h, marketCap, holdings);
+                if (typeof window.ethereum === 'undefined') {
+                    alert('אנא התקן MetaMask!');
+                    return;
                 }
-            } catch (error) {
-                dashboard.innerHTML = `<div class="dashboard"><p style="color: #ef4444;">Error: ${error.message}</p></div>`;
-            }
-        }
 
-        function renderFullDashboard(tokenName, config, change24h, volume24h, marketCap, holdings) {
-            const dashboard = document.getElementById('dashboard');
-            
-            let holdingsHTML = '';
-            if (walletAddress) {
-                if (holdings && holdings.needsSwitch) {
-                    holdingsHTML = `
-                        <div class="holdings" id="holdingsSection">
-                            <h3>💼 Your Holdings</h3>
-                            <div class="wallet-notice">⚠️ Switch to ${config.chainName}</div>
-                        </div>
-                    `;
-                } else if (holdings) {
-                    holdingsHTML = `
-                        <div class="holdings" id="holdingsSection">
-                            <h3>💼 Your Holdings</h3>
-                            <div class="holdings-grid">
-                                <div class="holding-card">
-                                    <div class="stat-label">${tokenName} Balance</div>
-                                    <div class="holding-value" id="tokenBalance">${parseFloat(holdings.tokenBalance).toFixed(4)}</div>
-                                    <div class="stat-label" style="opacity: 0.6;" id="tokenBalanceUSD">≈ $${(parseFloat(holdings.tokenBalance) * currentPrice).toFixed(2)}</div>
-                                </div>
-                                <div class="holding-card">
-                                    <div class="stat-label">ETH Balance</div>
-                                    <div class="holding-value" id="ethBalance">${parseFloat(holdings.ethBalance).toFixed(4)}</div>
-                                    <div class="stat-label" style="opacity: 0.6;" id="ethBalanceUSD">≈ $${(parseFloat(holdings.ethBalance) * ethPrice).toFixed(2)}</div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-            }
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                account = accounts[0];
+                web3 = new Web3(window.ethereum);
 
-            dashboard.innerHTML = `
-                <div class="dashboard">
-                    <h2 id="dashTitle">${tokenName} Dashboard <span class="network-badge">⛓️ ${config.chainName}</span></h2>
-                    <div class="contract-address">
-                        <strong>Contract:</strong> ${config.address}
-                    </div>
-                    <div class="price-card">
-                        <div class="label">Current Price</div>
-                        <div class="price" id="currentPrice">$${currentPrice.toFixed(6)}</div>
-                        <div class="label" id="priceChange" style="color: ${change24h >= 0 ? '#10b981' : '#ef4444'}">
-                            ${change24h >= 0 ? '▲' : '▼'} ${Math.abs(change24h).toFixed(2)}% (24h)
-                        </div>
-                    </div>
-                    ${holdingsHTML}
-                    <div class="stats">
-                        <div class="stat-card">
-                            <div class="stat-value" id="volume24h">$${(volume24h / 1000000).toFixed(2)}M</div>
-                            <div class="stat-label">24h Volume</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value" id="marketCap">$${(marketCap / 1000000).toFixed(2)}M</div>
-                            <div class="stat-label">Market Cap</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value" id="lastUpdate">${new Date().toLocaleTimeString()}</div>
-                            <div class="stat-label">Last Update</div>
-                        </div>
-                    </div>
-                    
-                    <div class="bot-controls">
-                        <h3>🤖 Volume Bot</h3>
-                        ${!walletAddress ? '<div class="wallet-notice">⚠️ Connect wallet first</div>' : ''}
-                        <div class="input-group">
-                            <label>Amount per trade (USD)</label>
-                            <input type="number" id="usdAmount" step="0.01" value="10" placeholder="10.00" 
-                                ${!walletAddress ? 'disabled' : ''} oninput="updateAmountDisplay()">
-                            <div class="eth-equivalent" id="ethEquivalent">≈ ${(10/ethPrice).toFixed(4)} ETH</div>
-                        </div>
-                        <div class="input-row">
-                            <div class="input-group">
-                                <label>Cycles (כמות פעמים)</label>
-                                <input type="number" id="cycles" min="1" value="5" ${!walletAddress ? 'disabled' : ''}>
-                            </div>
-                            <div class="input-group">
-                                <label>Delay (שניות בין פעולות)</label>
-                                <input type="number" id="delay" min="1" value="10" ${!walletAddress ? 'disabled' : ''}>
-                            </div>
-                        </div>
-                        <div class="input-group">
-                            <label>Bot Mode</label>
-                            <select id="botMode" ${!walletAddress ? 'disabled' : ''}>
-                                <option value="both">BUY + SELL (Both)</option>
-                                <option value="buy">BUY Only</option>
-                                <option value="sell">SELL Only</option>
-                            </select>
-                        </div>
-                        <div id="botStatus" style="display: none;" class="bot-status"></div>
-                        <div class="trade-buttons">
-                            <button class="bot" onclick="startBot()" id="startBotBtn" ${!walletAddress ? 'disabled' : ''}>
-                                🚀 START BOT
-                            </button>
-                            <button class="stop" onclick="stopBot()" id="stopBotBtn" disabled>
-                                ⛔ STOP BOT
-                            </button>
-                        </div>
-                        <div id="botLog" class="bot-log" style="display: none;"></div>
-                    </div>
-                    
-                    <div class="trading-controls">
-                        <h3>💰 Manual Trading</h3>
-                        <div class="trade-buttons">
-                            <button class="buy" onclick="executeTrade('buy')" id="buyBtn" ${!walletAddress ? 'disabled' : ''}>
-                                🟢 BUY ${tokenName}
-                            </button>
-                            <button class="sell" onclick="executeTrade('sell')" id="sellBtn" ${!walletAddress ? 'disabled' : ''}>
-                                🔴 SELL ${tokenName}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function updatePricesOnly(tokenName, change24h, volume24h, marketCap, holdings) {
-            const priceElem = document.getElementById('currentPrice');
-            if (priceElem) priceElem.textContent = `$${currentPrice.toFixed(6)}`;
-
-            const changeElem = document.getElementById('priceChange');
-            if (changeElem) {
-                changeElem.style.color = change24h >= 0 ? '#10b981' : '#ef4444';
-                changeElem.textContent = `${change24h >= 0 ? '▲' : '▼'} ${Math.abs(change24h).toFixed(2)}% (24h)`;
-            }
-
-            const volumeElem = document.getElementById('volume24h');
-            if (volumeElem) volumeElem.textContent = `$${(volume24h / 1000000).toFixed(2)}M`;
-
-            const mcapElem = document.getElementById('marketCap');
-            if (mcapElem) mcapElem.textContent = `$${(marketCap / 1000000).toFixed(2)}M`;
-
-            const timeElem = document.getElementById('lastUpdate');
-            if (timeElem) timeElem.textContent = new Date().toLocaleTimeString();
-
-            if (holdings && !holdings.needsSwitch) {
-                const tokenBalElem = document.getElementById('tokenBalance');
-                if (tokenBalElem) tokenBalElem.textContent = parseFloat(holdings.tokenBalance).toFixed(4);
-
-                const tokenBalUSDElem = document.getElementById('tokenBalanceUSD');
-                if (tokenBalUSDElem) tokenBalUSDElem.textContent = `≈ $${(parseFloat(holdings.tokenBalance) * currentPrice).toFixed(2)}`;
-
-                const ethBalElem = document.getElementById('ethBalance');
-                if (ethBalElem) ethBalElem.textContent = parseFloat(holdings.ethBalance).toFixed(4);
-
-                const ethBalUSDElem = document.getElementById('ethBalanceUSD');
-                if (ethBalUSDElem) ethBalUSDElem.textContent = `≈ $${(parseFloat(holdings.ethBalance) * ethPrice).toFixed(2)}`;
-            }
-
-            if (walletAddress) {
-                const buyBtn = document.getElementById('buyBtn');
-                const sellBtn = document.getElementById('sellBtn');
-                const startBtn = document.getElementById('startBotBtn');
+                document.getElementById('walletAddress').textContent = 
+                    account.substring(0, 6) + '...' + account.substring(38);
                 
-                if (buyBtn && buyBtn.disabled) buyBtn.disabled = false;
-                if (sellBtn && sellBtn.disabled) sellBtn.disabled = false;
-                if (startBtn && startBtn.disabled && !botRunning) startBtn.disabled = false;
+                const chainId = await web3.eth.getChainId();
+                document.getElementById('currentChain').textContent = getChainName(chainId);
+                
+                document.getElementById('walletInfo').classList.add('active');
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('startBtn').disabled = false;
+                
+                log('ארנק מחובר בהצלחה!', 'success');
+                
+                updateBalances();
+                
+                // Listen for account/chain changes
+                window.ethereum.on('accountsChanged', (accounts) => {
+                    if (accounts.length === 0) {
+                        location.reload();
+                    } else {
+                        account = accounts[0];
+                        updateBalances();
+                    }
+                });
+                
+                window.ethereum.on('chainChanged', () => {
+                    location.reload();
+                });
+                
+            } catch (error) {
+                console.error(error);
+                log('שגיאה בחיבור ארנק: ' + error.message, 'error');
             }
+        }
 
-            updateAmountDisplay();
+        function getChainName(chainId) {
+            const chains = {
+                1: 'Ethereum',
+                42161: 'Arbitrum'
+            };
+            return chains[chainId] || `Chain ${chainId}`;
+        }
+
+        async function updateBalances() {
+            try {
+                // Update RAIN balance
+                const rainWeb3 = new Web3(CONFIG.RAIN.rpcUrl);
+                const rainContract = new rainWeb3.eth.Contract(ERC20_ABI, CONFIG.RAIN.address);
+                const rainBalance = await rainContract.methods.balanceOf(account).call();
+                const rainDecimals = await rainContract.methods.decimals().call();
+                document.getElementById('rainBalance').textContent = 
+                    (rainBalance / Math.pow(10, rainDecimals)).toFixed(2);
+
+                // Update GEMS balance
+                const gemsWeb3 = new Web3(CONFIG.GEMS.rpcUrl);
+                const gemsContract = new gemsWeb3.eth.Contract(ERC20_ABI, CONFIG.GEMS.address);
+                const gemsBalance = await gemsContract.methods.balanceOf(account).call();
+                const gemsDecimals = await gemsContract.methods.decimals().call();
+                document.getElementById('gemsBalance').textContent = 
+                    (gemsBalance / Math.pow(10, gemsDecimals)).toFixed(2);
+                
+            } catch (error) {
+                console.error('Error updating balances:', error);
+            }
+        }
+
+        async function startPriceUpdates() {
+            updatePrices();
+            setInterval(updatePrices, 60000); // Update every minute
+        }
+
+        async function updatePrices() {
+            try {
+                const response = await fetch(
+                    `https://pro-api.coingecko.com/api/v3/simple/price?ids=${CONFIG.RAIN.coingeckoId},${CONFIG.GEMS.coingeckoId}&vs_currencies=usd`,
+                    {
+                        headers: {
+                            'X-Cg-Pro-Api-Key': CONFIG.COINGECKO_API_KEY
+                        }
+                    }
+                );
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    prices.rain = data[CONFIG.RAIN.coingeckoId]?.usd || 0;
+                    prices.gems = data[CONFIG.GEMS.coingeckoId]?.usd || 0;
+                    
+                    document.getElementById('rainPrice').textContent = '$' + prices.rain.toFixed(6);
+                    document.getElementById('gemsPrice').textContent = '$' + prices.gems.toFixed(6);
+                }
+            } catch (error) {
+                console.error('Error updating prices:', error);
+            }
         }
 
         async function startBot() {
-            if (botRunning) return;
-            
-            botRunning = true;
-            botStopped = false;
+            if (!account) {
+                log('אנא התחבר לארנק תחילה', 'error');
+                return;
+            }
+
             const cycles = parseInt(document.getElementById('cycles').value);
             const delay = parseInt(document.getElementById('delay').value) * 1000;
-            const mode = document.getElementById('botMode').value;
             
-            document.getElementById('startBotBtn').disabled = true;
-            document.getElementById('stopBotBtn').disabled = false;
-            document.getElementById('botLog').style.display = 'block';
+            if (cycles < 1 || delay < 5000) {
+                log('ערכים לא תקינים', 'error');
+                return;
+            }
+
+            isRunning = true;
+            currentCycle = 0;
+            stats = { success: 0, failed: 0, volume: 0 };
             
-            const statusDiv = document.getElementById('botStatus');
-            statusDiv.style.display = 'block';
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
             
-            logBot(`🚀 Bot started: ${cycles} cycles, ${delay/1000}s delay, mode: ${mode.toUpperCase()}`);
+            log(`🚀 בוט התחיל! מצב: ${currentMode}, מחזורים: ${cycles}`, 'success');
             
-            for (let i = 1; i <= cycles; i++) {
-                if (botStopped) {
-                    logBot('⛔ Bot stopped by user');
-                    break;
+            for (let i = 0; i < cycles && isRunning; i++) {
+                currentCycle = i + 1;
+                updateStats();
+                
+                log(`--- מחזור ${currentCycle}/${cycles} ---`, 'info');
+                
+                if (currentMode === 'BUY' || currentMode === 'BOTH') {
+                    await executeTrade('RAIN', 'BUY');
+                    if (isRunning) await sleep(delay / 2);
+                    await executeTrade('GEMS', 'BUY');
                 }
                 
-                statusDiv.textContent = `🔄 Running cycle ${i}/${cycles}...`;
-                logBot(`--- Cycle ${i}/${cycles} ---`);
+                if (currentMode === 'SELL' || currentMode === 'BOTH') {
+                    if (currentMode === 'BOTH') await sleep(delay / 2);
+                    await executeTrade('RAIN', 'SELL');
+                    if (isRunning) await sleep(delay / 2);
+                    await executeTrade('GEMS', 'SELL');
+                }
                 
-                try {
-                    if (mode === 'buy' || mode === 'both') {
-                        await executeTrade('buy', true);
-                        if (botStopped) break;
-                        if (mode === 'both') await sleep(delay);
-                    }
-                    
-                    if (mode === 'sell' || mode === 'both') {
-                        if (botStopped) break;
-                        await executeTrade('sell', true);
-                    }
-                    
-                    if (i < cycles && !botStopped) {
-                        logBot(`⏳ Waiting ${delay/1000}s...`);
-                        await sleep(delay);
-                    }
-                } catch (error) {
-                    logBot(`❌ Error in cycle ${i}: ${error.message}`);
+                if (isRunning && i < cycles - 1) {
+                    log(`⏳ המתנה ${delay/1000} שניות...`, 'info');
+                    await sleep(delay);
                 }
             }
             
-            botRunning = false;
-            document.getElementById('startBotBtn').disabled = false;
-            document.getElementById('stopBotBtn').disabled = true;
-            
-            if (!botStopped) {
-                statusDiv.textContent = '✅ Bot completed all cycles!';
-                logBot('✅ Bot finished successfully');
-            } else {
-                statusDiv.textContent = '⛔ Bot stopped';
+            if (isRunning) {
+                log('✅ כל המחזורים הושלמו!', 'success');
+                stopBot();
             }
-            
-            await updateDashboard(currentToken, false);
         }
 
         function stopBot() {
-            botStopped = true;
-            logBot('⛔ Stop requested...');
+            isRunning = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            log('🛑 בוט נעצר', 'info');
+        }
+
+        async function executeTrade(token, action) {
+            if (!isRunning) return;
+            
+            const config = token === 'RAIN' ? CONFIG.RAIN : CONFIG.GEMS;
+            const amount = parseFloat(document.getElementById(token === 'RAIN' ? 'rainAmount' : 'gemsAmount').value);
+            
+            try {
+                log(`${action === 'BUY' ? '🟢 קונה' : '🔴 מוכר'} ${amount} ${token}...`, 'info');
+                
+                // Switch to correct chain
+                await switchChain(config.chainId);
+                
+                if (action === 'BUY') {
+                    await buyToken(config, amount);
+                } else {
+                    await sellToken(config, amount);
+                }
+                
+                stats.success++;
+                stats.volume += amount * (token === 'RAIN' ? prices.rain : prices.gems);
+                log(`✅ ${action} ${token} הושלם בהצלחה!`, 'success');
+                
+                await updateBalances();
+                
+            } catch (error) {
+                stats.failed++;
+                log(`❌ שגיאה ב-${action} ${token}: ${error.message}`, 'error');
+                console.error(error);
+            }
+            
+            updateStats();
+        }
+
+        async function switchChain(targetChainId) {
+            const currentChainId = await web3.eth.getChainId();
+            if (currentChainId === targetChainId) return;
+            
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0x' + targetChainId.toString(16) }],
+                });
+                
+                // Wait a bit for the switch to complete
+                await sleep(1000);
+                web3 = new Web3(window.ethereum);
+                
+            } catch (error) {
+                if (error.code === 4902) {
+                    // Chain not added, add it
+                    if (targetChainId === 42161) {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: '0xa4b1',
+                                chainName: 'Arbitrum One',
+                                nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                                rpcUrls: ['https://arb1.arbitrum.io/rpc'],
+                                blockExplorerUrls: ['https://arbiscan.io']
+                            }]
+                        });
+                        await sleep(1000);
+                        web3 = new Web3(window.ethereum);
+                    }
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        async function buyToken(config, amount) {
+            const router = new web3.eth.Contract(ROUTER_ABI, config.router);
+            
+            // Calculate ETH amount needed (rough estimate)
+            const ethAmount = web3.utils.toWei((amount * 0.0001).toString(), 'ether'); // Adjust multiplier as needed
+            
+            const deadline = Math.floor(Date.now() / 1000) + 300; // 5 minutes
+            const path = [config.weth, config.address];
+            
+            const tx = router.methods.swapExactETHForTokens(
+                '0', // amountOutMin (accept any amount - use 0 for testing, add slippage in production)
+                path,
+                account,
+                deadline
+            );
+            
+            await tx.send({
+                from: account,
+                value: ethAmount,
+                gas: 300000
+            });
+        }
+
+        async function sellToken(config, amount) {
+            const tokenContract = new web3.eth.Contract(ERC20_ABI, config.address);
+            const decimals = await tokenContract.methods.decimals().call();
+            const amountWei = web3.utils.toBN(amount * Math.pow(10, decimals));
+            
+            // Check and approve if needed (SINGLE APPROVAL)
+            const allowance = await tokenContract.methods.allowance(account, config.router).call();
+            if (web3.utils.toBN(allowance).lt(amountWei)) {
+                log(`🔓 מאשר גישה ל-${config.chain === 'arbitrum' ? 'RAIN' : 'GEMS'}...`, 'info');
+                const approveTx = tokenContract.methods.approve(
+                    config.router,
+                    '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' // Max approval
+                );
+                await approveTx.send({ from: account, gas: 100000 });
+                log(`✅ אישור הושלם`, 'success');
+            }
+            
+            const router = new web3.eth.Contract(ROUTER_ABI, config.router);
+            const deadline = Math.floor(Date.now() / 1000) + 300;
+            const path = [config.address, config.weth];
+            
+            const tx = router.methods.swapExactTokensForETH(
+                amountWei.toString(),
+                '0', // amountOutMin (accept any amount)
+                path,
+                account,
+                deadline
+            );
+            
+            await tx.send({
+                from: account,
+                gas: 300000
+            });
+        }
+
+        function updateStats() {
+            document.getElementById('currentCycle').textContent = currentCycle;
+            document.getElementById('successTrades').textContent = stats.success;
+            document.getElementById('failedTrades').textContent = stats.failed;
+            document.getElementById('totalVolume').textContent = '$' + stats.volume.toFixed(2);
+        }
+
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString('he-IL');
+            entry.textContent = `[${timestamp}] ${message}`;
+            logContainer.insertBefore(entry, logContainer.firstChild);
+            
+            // Keep only last 50 entries
+            while (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
         }
 
         function sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
-
-        async function executeTrade(action, fromBot = false) {
-            if (!signer) {
-                alert('Connect wallet first');
-                return;
-            }
-
-            const config = TOKENS[currentToken];
-            const usdAmount = parseFloat(document.getElementById('usdAmount').value);
-            if (!usdAmount || usdAmount <= 0) {
-                alert('Enter valid USD amount');
-                return;
-            }
-
-            const network = await provider.getNetwork();
-            if (network.chainId !== config.chainId) {
-                if (!fromBot) alert(`Switch to ${config.chainName}`);
-                await switchNetwork(config.chainId);
-                return;
-            }
-
-            if (!fromBot) {
-                const btn = document.getElementById(action === 'buy' ? 'buyBtn' : 'sellBtn');
-                btn.disabled = true;
-                btn.textContent = action === 'buy' ? '⏳ Buying...' : '⏳ Selling...';
-            } else {
-                logBot(`${action === 'buy' ? '🟢' : '🔴'} ${action.toUpperCase()} $${usdAmount}...`);
-            }
-
-            try {
-                const ethAmount = usdAmount / ethPrice;
-                const amountInWei = ethers.utils.parseEther(ethAmount.toFixed(18));
-
-                if (action === 'buy') {
-                    // BUY: ETH -> Token באמצעות 1inch
-                    const swapParams = {
-                        fromTokenAddress: ETH_ADDRESS,
-                        toTokenAddress: config.address,
-                        amount: amountInWei.toString(),
-                        fromAddress: walletAddress,
-                        slippage: 1,
-                        disableEstimate: false,
-                        allowPartialFill: false
-                    };
-
-                    const apiUrl = `https://api.1inch.io/v5.0/${config.chainId}/swap?${new URLSearchParams(swapParams)}`;
-                    const swapData = await fetch(apiUrl).then(r => r.json());
-
-                    if (swapData.error) throw new Error(swapData.description || swapData.error);
-
-                    const tx = await signer.sendTransaction({
-                        to: swapData.tx.to,
-                        data: swapData.tx.data,
-                        value: swapData.tx.value,
-                        gasLimit: swapData.tx.gas
-                    });
-                    await tx.wait();
-
-                    if (fromBot) {
-                        logBot(`✅ BUY complete: ${tx.hash.slice(0,10)}...`);
-                    } else {
-                        alert(`✅ Bought!\nTx: ${tx.hash}`);
-                    }
-                } else {
-                    // SELL: Token -> ETH באמצעות 1inch
-                    const token = new ethers.Contract(config.address, ERC20_ABI, signer);
-                    const tokenAmount = usdAmount / currentPrice;
-                    const decimals = await token.decimals();
-                    const amountIn = ethers.utils.parseUnits(tokenAmount.toFixed(decimals), decimals);
-
-                    // בדיקת approve - רק פעם אחת!
-                    const spenderAddress = '0x1111111254EEB25477B68fb85Ed929f73A960582'; // 1inch router
-                    const allowance = await token.allowance(walletAddress, spenderAddress);
-                    
-                    if (allowance.lt(amountIn)) {
-                        if (fromBot) logBot('⏳ Approving token (one-time)...');
-                        const approveTx = await token.approve(spenderAddress, ethers.constants.MaxUint256);
-                        await approveTx.wait();
-                        if (fromBot) logBot('✅ Approval granted');
-                    }
-
-                    const swapParams = {
-                        fromTokenAddress: config.address,
-                        toTokenAddress: ETH_ADDRESS,
-                        amount: amountIn.toString(),
-                        fromAddress: walletAddress,
-                        slippage: 1,
-                        disableEstimate: false,
-                        allowPartialFill: false
-                    };
-
-                    const apiUrl = `https://api.1inch.io/v5.0/${config.chainId}/swap?${new URLSearchParams(swapParams)}`;
-                    const swapData = await fetch(apiUrl).then(r => r.json());
-
-                    if (swapData.error) throw new Error(swapData.description || swapData.error);
-
-                    const tx = await signer.sendTransaction({
-                        to: swapData.tx.to,
-                        data: swapData.tx.data,
-                        value: swapData.tx.value || 0,
-                        gasLimit: swapData.tx.gas
-                    });
-                    await tx.wait();
-
-                    if (fromBot) {
-                        logBot(`✅ SELL complete: ${tx.hash.slice(0,10)}...`);
-                    } else {
-                        alert(`✅ Sold!\nTx: ${tx.hash}`);
-                    }
-                }
-            } catch (error) {
-                console.error('Trade error:', error);
-                if (fromBot) {
-                    logBot(`❌ ${action.toUpperCase()} failed: ${error.message}`);
-                    throw error;
-                } else {
-                    alert('Failed: ' + error.message);
-                }
-            } finally {
-                if (!fromBot) {
-                    const btn = document.getElementById(action === 'buy' ? 'buyBtn' : 'sellBtn');
-                    btn.disabled = false;
-                    const tokenName = currentToken === 'rain' ? 'RAIN' : 'GEMS-VIP';
-                    btn.textContent = action === 'buy' ? `🟢 BUY ${tokenName}` : `🔴 SELL ${tokenName}`;
-                }
-            }
-        }
-
-        window.addEventListener('load', () => { selectToken('rain'); });
     </script>
 </body>
 </html>
