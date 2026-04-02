@@ -492,6 +492,12 @@
                                 🔴 SELL ${tokenName}
                             </button>
                         </div>
+                        <div style="margin-top: 20px; padding: 15px; background: rgba(251, 191, 36, 0.1); border: 1px solid #f59e0b; border-radius: 8px;">
+                            <div style="margin-bottom: 10px; font-size: 0.9rem;">💡 After selling, WETH stays in your wallet. Convert it back to ETH:</div>
+                            <button onclick="convertWETHtoETH()" id="convertBtn" ${!walletAddress ? 'disabled' : ''} style="width: 100%; background: #f59e0b;">
+                                🔄 Convert All WETH → ETH
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -660,17 +666,25 @@
                 const deadline = Math.floor(Date.now() / 1000) + 600;
 
                 if (action === 'buy') {
-                    // BUY: ETH -> WETH -> Token
+                    // BUY: WETH -> Token (אם אין WETH, ממיר ETH→WETH קודם)
                     const wethAddress = WETH[config.chainId];
                     const weth = new ethers.Contract(wethAddress, WETH_ABI, signer);
                     
-                    // שלב 1: המרת ETH ל-WETH
-                    if (fromBot) logBot('⏳ Converting ETH -> WETH...');
-                    const depositTx = await weth.deposit({ value: amountInWei, gasLimit: 100000 });
-                    await depositTx.wait();
-                    if (fromBot) logBot(`✅ ETH -> WETH: ${depositTx.hash.slice(0,10)}...`);
+                    // בדיקת יתרת WETH
+                    const wethBalance = await weth.balanceOf(walletAddress);
+                    let depositHash = null;
                     
-                    // שלב 2: אישור WETH לראוטר (רק פעם אחת)
+                    if (wethBalance.lt(amountInWei)) {
+                        // אין מספיק WETH - ממיר ETH→WETH
+                        const needed = amountInWei.sub(wethBalance);
+                        if (fromBot) logBot(`⏳ Need more WETH, converting ${ethers.utils.formatEther(needed)} ETH...`);
+                        const depositTx = await weth.deposit({ value: needed, gasLimit: 100000 });
+                        await depositTx.wait();
+                        depositHash = depositTx.hash;
+                        if (fromBot) logBot(`✅ ETH -> WETH: ${depositTx.hash.slice(0,10)}...`);
+                    }
+                    
+                    // אישור WETH לראוטר (רק פעם אחת)
                     const allowance = await weth.allowance(walletAddress, config.router);
                     if (allowance.lt(amountInWei)) {
                         if (fromBot) logBot('⏳ Approving WETH (one-time)...');
@@ -679,7 +693,7 @@
                         if (fromBot) logBot('✅ WETH approval granted');
                     }
                     
-                    // שלב 3: Swap WETH -> Token
+                    // Swap WETH -> Token
                     if (fromBot) logBot('⏳ Swapping WETH -> Token...');
                     const params = {
                         tokenIn: wethAddress,
@@ -696,7 +710,11 @@
                     if (fromBot) {
                         logBot(`✅ BUY complete: ${tx.hash.slice(0,10)}...`);
                     } else {
-                        alert(`✅ Bought!\nDeposit: ${depositTx.hash}\nSwap: ${tx.hash}`);
+                        if (depositHash) {
+                            alert(`✅ Bought!\nDeposit: ${depositHash}\nSwap: ${tx.hash}`);
+                        } else {
+                            alert(`✅ Bought using existing WETH!\nSwap: ${tx.hash}`);
+                        }
                     }
                 } else {
                     // SELL: Token -> WETH -> ETH
@@ -735,19 +753,11 @@
                     await swapTx.wait();
                     if (fromBot) logBot(`✅ Token -> WETH: ${swapTx.hash.slice(0,10)}...`);
 
-                    // WETH -> ETH
-                    const weth = new ethers.Contract(wethAddress, WETH_ABI, signer);
-                    const wethBalance = await weth.balanceOf(walletAddress);
-                    
-                    if (wethBalance.gt(0)) {
-                        if (fromBot) logBot('⏳ WETH -> ETH...');
-                        const withdrawTx = await weth.withdraw(wethBalance, { gasLimit: 100000 });
-                        await withdrawTx.wait();
-                        if (fromBot) {
-                            logBot(`✅ SELL complete! ${withdrawTx.hash.slice(0,10)}...`);
-                        } else {
-                            alert(`✅ Sold!\nSwap: ${swapTx.hash}\nWithdraw: ${withdrawTx.hash}`);
-                        }
+                    // WETH נשאר בארנק - לא ממירים אוטומטית ל-ETH
+                    if (fromBot) {
+                        logBot(`✅ SELL complete: ${swapTx.hash.slice(0,10)}... (WETH in wallet)`);
+                    } else {
+                        alert(`✅ Sold to WETH!\nTx: ${swapTx.hash}\n\nUse "Convert WETH→ETH" button to get ETH back.`);
                     }
                 }
             } catch (error) {
@@ -765,6 +775,52 @@
                     const tokenName = currentToken === 'rain' ? 'RAIN' : 'GEMS-VIP';
                     btn.textContent = action === 'buy' ? `🟢 BUY ${tokenName}` : `🔴 SELL ${tokenName}`;
                 }
+            }
+        }
+
+        async function convertWETHtoETH() {
+            if (!signer || !walletAddress) {
+                alert('Connect wallet first');
+                return;
+            }
+
+            const btn = document.getElementById('convertBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Converting...';
+
+            try {
+                const config = TOKENS[currentToken];
+                const network = await provider.getNetwork();
+                
+                if (network.chainId !== config.chainId) {
+                    alert(`Switch to ${config.chainName}`);
+                    await switchNetwork(config.chainId);
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Convert All WETH → ETH';
+                    return;
+                }
+
+                const wethAddress = WETH[config.chainId];
+                const weth = new ethers.Contract(wethAddress, WETH_ABI, signer);
+                const wethBalance = await weth.balanceOf(walletAddress);
+
+                if (wethBalance.eq(0)) {
+                    alert('No WETH to convert!');
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Convert All WETH → ETH';
+                    return;
+                }
+
+                const withdrawTx = await weth.withdraw(wethBalance, { gasLimit: 100000 });
+                await withdrawTx.wait();
+                
+                alert(`✅ Converted ${ethers.utils.formatEther(wethBalance)} WETH → ETH!\nTx: ${withdrawTx.hash}`);
+                await updateDashboard(currentToken, false);
+            } catch (error) {
+                alert('Failed: ' + (error.reason || error.message));
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔄 Convert All WETH → ETH';
             }
         }
 
