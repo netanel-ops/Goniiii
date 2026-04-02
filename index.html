@@ -243,6 +243,24 @@
             'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) payable returns (uint256 amountOut)'
         ];
 
+        function saveSettings() {
+            localStorage.setItem('volumeBot_usdAmount', document.getElementById('usdAmount')?.value || '10');
+            localStorage.setItem('volumeBot_cycles', document.getElementById('cycles')?.value || '5');
+            localStorage.setItem('volumeBot_delay', document.getElementById('delay')?.value || '10');
+            localStorage.setItem('volumeBot_mode', document.getElementById('botMode')?.value || 'both');
+            localStorage.setItem('volumeBot_token', currentToken || 'rain');
+        }
+
+        function loadSettings() {
+            currentToken = localStorage.getItem('volumeBot_token') || 'rain';
+            return {
+                usdAmount: localStorage.getItem('volumeBot_usdAmount') || '10',
+                cycles: localStorage.getItem('volumeBot_cycles') || '5',
+                delay: localStorage.getItem('volumeBot_delay') || '10',
+                mode: localStorage.getItem('volumeBot_mode') || 'both'
+            };
+        }
+
         function logBot(message) {
             const log = document.getElementById('botLog');
             if (log) {
@@ -261,6 +279,7 @@
                     await provider.send('eth_requestAccounts', []);
                     signer = provider.getSigner();
                     walletAddress = await signer.getAddress();
+                    localStorage.setItem('volumeBot_walletConnected', 'true');
                     document.getElementById('wallet-status').innerHTML = 
                         `<span style="color: #10b981;">✓ ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}</span>`;
                     if (currentToken) await updateDashboard(currentToken);
@@ -269,6 +288,12 @@
                 }
             } else {
                 alert('Please install MetaMask');
+            }
+        }
+
+        async function autoConnectWallet() {
+            if (localStorage.getItem('volumeBot_walletConnected') === 'true') {
+                await connectWallet();
             }
         }
 
@@ -286,6 +311,7 @@
 
         async function selectToken(tokenId) {
             currentToken = tokenId;
+            saveSettings();
             document.getElementById('btn-rain').classList.remove('active');
             document.getElementById('btn-gems').classList.remove('active');
             document.getElementById(`btn-${tokenId === 'rain' ? 'rain' : 'gems'}`).classList.add('active');
@@ -295,6 +321,7 @@
         }
 
         function updateAmountDisplay() {
+            saveSettings();
             const usdAmount = document.getElementById('usdAmount').value;
             const ethAmount = parseFloat(usdAmount) / ethPrice;
             const tokenAmount = parseFloat(usdAmount) / currentPrice;
@@ -357,6 +384,7 @@
                 const marketCap = tokenData.usd_market_cap || 0;
 
                 const holdings = await getHoldings();
+                const settings = loadSettings();
 
                 let holdingsHTML = '';
                 if (walletAddress) {
@@ -422,26 +450,26 @@
                             ${!walletAddress ? '<div class="wallet-notice">⚠️ Connect wallet first</div>' : ''}
                             <div class="input-group">
                                 <label>Amount per trade (USD)</label>
-                                <input type="number" id="usdAmount" step="0.01" value="10" placeholder="10.00" 
+                                <input type="number" id="usdAmount" step="0.01" value="${settings.usdAmount}" placeholder="10.00" 
                                     ${!walletAddress ? 'disabled' : ''} oninput="updateAmountDisplay()">
-                                <div class="eth-equivalent" id="ethEquivalent">≈ ${(10/ethPrice).toFixed(4)} ETH</div>
+                                <div class="eth-equivalent" id="ethEquivalent">≈ ${(parseFloat(settings.usdAmount)/ethPrice).toFixed(4)} ETH</div>
                             </div>
                             <div class="input-row">
                                 <div class="input-group">
                                     <label>Cycles (כמות פעמים)</label>
-                                    <input type="number" id="cycles" min="1" value="5" ${!walletAddress ? 'disabled' : ''}>
+                                    <input type="number" id="cycles" min="1" value="${settings.cycles}" ${!walletAddress ? 'disabled' : ''} onchange="saveSettings()">
                                 </div>
                                 <div class="input-group">
                                     <label>Delay (שניות בין פעולות)</label>
-                                    <input type="number" id="delay" min="1" value="10" ${!walletAddress ? 'disabled' : ''}>
+                                    <input type="number" id="delay" min="1" value="${settings.delay}" ${!walletAddress ? 'disabled' : ''} onchange="saveSettings()">
                                 </div>
                             </div>
                             <div class="input-group">
                                 <label>Bot Mode</label>
-                                <select id="botMode" ${!walletAddress ? 'disabled' : ''}>
-                                    <option value="both">BUY + SELL (Both)</option>
-                                    <option value="buy">BUY Only</option>
-                                    <option value="sell">SELL Only</option>
+                                <select id="botMode" ${!walletAddress ? 'disabled' : ''} onchange="saveSettings()">
+                                    <option value="both" ${settings.mode === 'both' ? 'selected' : ''}>BUY + SELL (Both)</option>
+                                    <option value="buy" ${settings.mode === 'buy' ? 'selected' : ''}>BUY Only</option>
+                                    <option value="sell" ${settings.mode === 'sell' ? 'selected' : ''}>SELL Only</option>
                                 </select>
                             </div>
                             <div id="botStatus" style="display: none;" class="bot-status"></div>
@@ -505,16 +533,18 @@
                     if (mode === 'buy' || mode === 'both') {
                         await executeTrade('buy', true);
                         if (botStopped) break;
-                        if (mode === 'both') await sleep(delay);
+                        if (mode === 'both' && i < cycles) {
+                            logBot(`⏳ Waiting ${delay/1000}s before SELL...`);
+                            await sleep(delay);
+                        }
                     }
                     
-                    if (mode === 'sell' || mode === 'both') {
-                        if (botStopped) break;
+                    if ((mode === 'sell' || mode === 'both') && !botStopped) {
                         await executeTrade('sell', true);
                     }
                     
                     if (i < cycles && !botStopped) {
-                        logBot(`⏳ Waiting ${delay/1000}s...`);
+                        logBot(`⏳ Waiting ${delay/1000}s before next cycle...`);
                         await sleep(delay);
                     }
                 } catch (error) {
@@ -651,7 +681,11 @@
             }
         }
 
-        window.addEventListener('load', () => { selectToken('rain'); });
+        window.addEventListener('load', async () => { 
+            await autoConnectWallet();
+            const settings = loadSettings();
+            await selectToken(settings.token || 'rain');
+        });
     </script>
 </body>
 </html>
