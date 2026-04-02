@@ -144,6 +144,11 @@
             color: #10b981;
             margin: 10px 0;
         }
+        .eth-equivalent {
+            font-size: 14px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -170,21 +175,21 @@
         let walletAddress = null;
         let signer = null;
         let provider = null;
+        let currentPrice = 0;
+        let ethPrice = 0;
 
         const TOKENS = {
             'rain': {
                 address: '0x25118290e6a5f4139381d072181157035864099d',
                 chainId: 42161,
                 chainName: 'Arbitrum One',
-                router: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
-                rpcUrl: 'https://arb1.arbitrum.io/rpc'
+                router: '0xE592427A0AEce92De3Edee1F18E0157C05861564'
             },
             'gems-vip': {
                 address: '0x3010ccb5419f1ef26d40a7cd3f0d707a0fa127dc',
                 chainId: 1,
                 chainName: 'Ethereum',
-                router: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
-                rpcUrl: 'https://eth.llamarpc.com'
+                router: '0xE592427A0AEce92De3Edee1F18E0157C05861564'
             }
         };
 
@@ -201,6 +206,7 @@
         ];
 
         const ROUTER_ABI = [
+            'function exactOutputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountOut, uint256 amountInMaximum, uint160 sqrtPriceLimitX96)) payable returns (uint256 amountIn)',
             'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) payable returns (uint256 amountOut)'
         ];
 
@@ -220,7 +226,7 @@
                     alert('Failed to connect: ' + error.message);
                 }
             } else {
-                alert('Please install MetaMask from metamask.io');
+                alert('Please install MetaMask');
             }
         }
 
@@ -232,9 +238,6 @@
                 });
                 return true;
             } catch (error) {
-                if (error.code === 4902) {
-                    alert(`Please add ${TOKENS[currentToken].chainName} network to MetaMask`);
-                }
                 return false;
             }
         }
@@ -249,16 +252,20 @@
             priceInterval = setInterval(() => updateDashboard(tokenId), 5000);
         }
 
+        function updateAmountDisplay() {
+            const usdAmount = document.getElementById('usdAmount').value;
+            const ethAmount = parseFloat(usdAmount) / ethPrice;
+            const tokenAmount = parseFloat(usdAmount) / currentPrice;
+            document.getElementById('ethEquivalent').textContent = 
+                `≈ ${ethAmount.toFixed(4)} ETH or ${tokenAmount.toFixed(2)} tokens`;
+        }
+
         async function getHoldings() {
             if (!walletAddress || !provider) return null;
-            
             try {
                 const config = TOKENS[currentToken];
                 const network = await provider.getNetwork();
-                
-                if (network.chainId !== config.chainId) {
-                    return { needsSwitch: true };
-                }
+                if (network.chainId !== config.chainId) return { needsSwitch: true };
 
                 const token = new ethers.Contract(config.address, ERC20_ABI, provider);
                 const [tokenBalance, ethBalance, decimals] = await Promise.all([
@@ -283,17 +290,27 @@
             dashboard.style.display = 'block';
             
             try {
-                const response = await fetch(
-                    `https://pro-api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true`,
-                    { headers: { 'x-cg-pro-api-key': 'CG-Qa4xRCrDuHn2232ArjgSwA8g' } }
-                );
-                const data = await response.json();
+                const [priceRes, ethPriceRes] = await Promise.all([
+                    fetch(
+                        `https://pro-api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true`,
+                        { headers: { 'x-cg-pro-api-key': 'CG-Qa4xRCrDuHn2232ArjgSwA8g' } }
+                    ),
+                    fetch(
+                        'https://pro-api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
+                        { headers: { 'x-cg-pro-api-key': 'CG-Qa4xRCrDuHn2232ArjgSwA8g' } }
+                    )
+                ]);
+
+                const data = await priceRes.json();
+                const ethData = await ethPriceRes.json();
                 const tokenData = data[tokenId];
                 if (!tokenData) throw new Error('Token data not available');
 
+                currentPrice = tokenData.usd || 0;
+                ethPrice = ethData.ethereum.usd || 0;
+
                 const config = TOKENS[tokenId];
                 const tokenName = tokenId === 'rain' ? 'RAIN' : 'GEMS-VIP';
-                const price = tokenData.usd || 0;
                 const change24h = tokenData.usd_24h_change || 0;
                 const volume24h = tokenData.usd_24h_vol || 0;
                 const marketCap = tokenData.usd_market_cap || 0;
@@ -306,7 +323,7 @@
                         holdingsHTML = `
                             <div class="holdings">
                                 <h3>💼 Your Holdings</h3>
-                                <div class="wallet-notice">⚠️ Switch to ${config.chainName} to see your holdings</div>
+                                <div class="wallet-notice">⚠️ Switch to ${config.chainName} to see holdings</div>
                             </div>
                         `;
                     } else if (holdings) {
@@ -317,11 +334,12 @@
                                     <div class="holding-card">
                                         <div class="stat-label">${tokenName} Balance</div>
                                         <div class="holding-value">${parseFloat(holdings.tokenBalance).toFixed(4)}</div>
-                                        <div class="stat-label" style="opacity: 0.6;">≈ $${(parseFloat(holdings.tokenBalance) * price).toFixed(2)}</div>
+                                        <div class="stat-label" style="opacity: 0.6;">≈ $${(parseFloat(holdings.tokenBalance) * currentPrice).toFixed(2)}</div>
                                     </div>
                                     <div class="holding-card">
                                         <div class="stat-label">ETH Balance</div>
                                         <div class="holding-value">${parseFloat(holdings.ethBalance).toFixed(4)}</div>
+                                        <div class="stat-label" style="opacity: 0.6;">≈ $${(parseFloat(holdings.ethBalance) * ethPrice).toFixed(2)}</div>
                                     </div>
                                 </div>
                             </div>
@@ -337,7 +355,7 @@
                         </div>
                         <div class="price-card">
                             <div class="label">Current Price</div>
-                            <div class="price">$${price.toFixed(6)}</div>
+                            <div class="price">$${currentPrice.toFixed(6)}</div>
                             <div class="label" style="color: ${change24h >= 0 ? '#10b981' : '#ef4444'}">
                                 ${change24h >= 0 ? '▲' : '▼'} ${Math.abs(change24h).toFixed(2)}% (24h)
                             </div>
@@ -359,10 +377,12 @@
                         </div>
                         <div class="trading-controls">
                             <h3>🤖 Trading Controls</h3>
-                            ${!walletAddress ? '<div class="wallet-notice">⚠️ Connect wallet to enable trading</div>' : ''}
+                            ${!walletAddress ? '<div class="wallet-notice">⚠️ Connect wallet first</div>' : ''}
                             <div class="input-group">
-                                <label>Amount (ETH)</label>
-                                <input type="number" id="amount" step="0.001" value="0.01" placeholder="0.01" ${!walletAddress ? 'disabled' : ''}>
+                                <label>Amount (USD)</label>
+                                <input type="number" id="usdAmount" step="0.01" value="10" placeholder="10.00" 
+                                    ${!walletAddress ? 'disabled' : ''} oninput="updateAmountDisplay()">
+                                <div class="eth-equivalent" id="ethEquivalent">≈ ${(10/ethPrice).toFixed(4)} ETH</div>
                             </div>
                             <div class="trade-buttons">
                                 <button class="buy" onclick="executeTrade('buy')" id="buyBtn" ${!walletAddress ? 'disabled' : ''}>
@@ -373,67 +393,68 @@
                                 </button>
                             </div>
                             <p style="margin-top: 15px; opacity: 0.6; font-size: 14px; text-align: center;">
-                                ⚠️ Real Uniswap V3 swaps. Check slippage and gas before confirming.
+                                ⚠️ Real Uniswap V3 swaps on ${config.chainName}
                             </p>
                         </div>
                     </div>
                 `;
             } catch (error) {
-                dashboard.innerHTML = `<div class="dashboard"><p style="color: #ef4444;">Failed to load: ${error.message}</p></div>`;
+                dashboard.innerHTML = `<div class="dashboard"><p style="color: #ef4444;">Error: ${error.message}</p></div>`;
             }
         }
 
         async function executeTrade(action) {
             if (!signer) {
-                alert('Please connect wallet first');
+                alert('Connect wallet first');
                 return;
             }
 
             const config = TOKENS[currentToken];
-            const amount = document.getElementById('amount').value;
-            if (!amount || parseFloat(amount) <= 0) {
-                alert('Please enter a valid amount');
+            const usdAmount = parseFloat(document.getElementById('usdAmount').value);
+            if (!usdAmount || usdAmount <= 0) {
+                alert('Enter valid USD amount');
                 return;
             }
 
             const network = await provider.getNetwork();
             if (network.chainId !== config.chainId) {
-                alert(`Please switch to ${config.chainName} in MetaMask`);
-                const switched = await switchNetwork(config.chainId);
-                if (!switched) return;
+                alert(`Switch to ${config.chainName}`);
+                await switchNetwork(config.chainId);
+                return;
             }
 
             const btn = document.getElementById(action === 'buy' ? 'buyBtn' : 'sellBtn');
             const originalText = btn.textContent;
             btn.disabled = true;
-            btn.textContent = action === 'buy' ? '⏳ Buying...' : '⏳ Selling...';
 
             try {
+                const ethAmount = usdAmount / ethPrice;
+                const amountInWei = ethers.utils.parseEther(ethAmount.toFixed(18));
                 const router = new ethers.Contract(config.router, ROUTER_ABI, signer);
-                const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
-                const amountIn = ethers.utils.parseEther(amount);
+                const deadline = Math.floor(Date.now() / 1000) + 600;
 
                 if (action === 'buy') {
+                    btn.textContent = '⏳ Buying...';
                     const params = {
                         tokenIn: WETH[config.chainId],
                         tokenOut: config.address,
-                        fee: 3000,
+                        fee: 10000,
                         recipient: walletAddress,
                         deadline: deadline,
-                        amountIn: amountIn,
+                        amountIn: amountInWei,
                         amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
                     };
-                    
-                    const tx = await router.exactInputSingle(params, { value: amountIn });
-                    btn.textContent = '⏳ Confirming...';
+                    const tx = await router.exactInputSingle(params, { value: amountInWei });
                     await tx.wait();
-                    alert(`✅ Buy successful!\nTx: ${tx.hash}`);
-                    await updateDashboard(currentToken);
+                    alert(`✅ Bought $${usdAmount} worth!\nTx: ${tx.hash}`);
                 } else {
                     const token = new ethers.Contract(config.address, ERC20_ABI, signer);
-                    const balance = await token.balanceOf(walletAddress);
+                    const tokenAmount = usdAmount / currentPrice;
+                    const decimals = await token.decimals();
+                    const amountIn = ethers.utils.parseUnits(tokenAmount.toFixed(decimals), decimals);
                     
+                    const balance = await token.balanceOf(walletAddress);
                     if (balance.lt(amountIn)) {
                         alert('Insufficient token balance');
                         return;
@@ -446,27 +467,25 @@
                         await approveTx.wait();
                     }
 
+                    btn.textContent = '⏳ Selling...';
                     const params = {
                         tokenIn: config.address,
                         tokenOut: WETH[config.chainId],
-                        fee: 3000,
+                        fee: 10000,
                         recipient: walletAddress,
                         deadline: deadline,
                         amountIn: amountIn,
                         amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
                     };
-
-                    btn.textContent = '⏳ Swapping...';
                     const tx = await router.exactInputSingle(params);
-                    btn.textContent = '⏳ Confirming...';
                     await tx.wait();
-                    alert(`✅ Sell successful!\nTx: ${tx.hash}`);
-                    await updateDashboard(currentToken);
+                    alert(`✅ Sold $${usdAmount} worth!\nTx: ${tx.hash}`);
                 }
+                await updateDashboard(currentToken);
             } catch (error) {
                 console.error('Trade error:', error);
-                alert('Transaction failed: ' + (error.reason || error.message));
+                alert('Failed: ' + (error.reason || error.message));
             } finally {
                 btn.disabled = false;
                 btn.textContent = originalText;
