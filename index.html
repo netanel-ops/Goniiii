@@ -51,6 +51,9 @@
         button.buy:hover:not(:disabled) { background: #059669; }
         button.sell { background: #ef4444; }
         button.sell:hover:not(:disabled) { background: #dc2626; }
+        button.bot { background: #f59e0b; font-size: 20px; padding: 18px 40px; }
+        button.bot:hover:not(:disabled) { background: #d97706; }
+        button.stop { background: #dc2626; }
         .dashboard {
             background: rgba(26, 31, 58, 0.8);
             border-radius: 16px;
@@ -82,7 +85,7 @@
         }
         .stat-value { font-size: 1.8rem; font-weight: bold; color: #7c3aed; }
         .stat-label { margin-top: 8px; opacity: 0.7; }
-        .trading-controls, .holdings {
+        .trading-controls, .holdings, .bot-controls {
             background: rgba(255,255,255,0.03);
             border-radius: 12px;
             padding: 30px;
@@ -90,7 +93,7 @@
         }
         .input-group { margin: 20px 0; }
         .input-group label { display: block; margin-bottom: 8px; font-weight: 500; }
-        .input-group input {
+        .input-group input, .input-group select {
             width: 100%;
             padding: 12px;
             border-radius: 6px;
@@ -98,6 +101,11 @@
             background: rgba(10, 14, 39, 0.8);
             color: white;
             font-size: 16px;
+        }
+        .input-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
         }
         .trade-buttons { display: flex; gap: 15px; margin-top: 20px; }
         .trade-buttons button { flex: 1; }
@@ -149,6 +157,30 @@
             opacity: 0.7;
             margin-top: 5px;
         }
+        .bot-status {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            font-weight: bold;
+        }
+        .bot-log {
+            background: rgba(10, 14, 39, 0.8);
+            border: 1px solid rgba(124, 58, 237, 0.2);
+            border-radius: 6px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 13px;
+            margin-top: 15px;
+        }
+        .bot-log div {
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
     </style>
 </head>
 <body>
@@ -177,6 +209,8 @@
         let provider = null;
         let currentPrice = 0;
         let ethPrice = 0;
+        let botRunning = false;
+        let botStopped = false;
 
         const TOKENS = {
             'rain': {
@@ -206,9 +240,19 @@
         ];
 
         const ROUTER_ABI = [
-            'function exactOutputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountOut, uint256 amountInMaximum, uint160 sqrtPriceLimitX96)) payable returns (uint256 amountIn)',
             'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) payable returns (uint256 amountOut)'
         ];
+
+        function logBot(message) {
+            const log = document.getElementById('botLog');
+            if (log) {
+                const time = new Date().toLocaleTimeString();
+                const entry = document.createElement('div');
+                entry.textContent = `[${time}] ${message}`;
+                log.insertBefore(entry, log.firstChild);
+                if (log.children.length > 20) log.removeChild(log.lastChild);
+            }
+        }
 
         async function connectWallet() {
             if (typeof window.ethereum !== 'undefined') {
@@ -219,9 +263,7 @@
                     walletAddress = await signer.getAddress();
                     document.getElementById('wallet-status').innerHTML = 
                         `<span style="color: #10b981;">✓ ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}</span>`;
-                    if (currentToken) {
-                        await updateDashboard(currentToken);
-                    }
+                    if (currentToken) await updateDashboard(currentToken);
                 } catch (error) {
                     alert('Failed to connect: ' + error.message);
                 }
@@ -280,7 +322,6 @@
                     needsSwitch: false
                 };
             } catch (error) {
-                console.error('Holdings error:', error);
                 return null;
             }
         }
@@ -323,7 +364,7 @@
                         holdingsHTML = `
                             <div class="holdings">
                                 <h3>💼 Your Holdings</h3>
-                                <div class="wallet-notice">⚠️ Switch to ${config.chainName} to see holdings</div>
+                                <div class="wallet-notice">⚠️ Switch to ${config.chainName}</div>
                             </div>
                         `;
                     } else if (holdings) {
@@ -375,15 +416,48 @@
                                 <div class="stat-label">Last Update</div>
                             </div>
                         </div>
-                        <div class="trading-controls">
-                            <h3>🤖 Trading Controls</h3>
+                        
+                        <div class="bot-controls">
+                            <h3>🤖 Volume Bot</h3>
                             ${!walletAddress ? '<div class="wallet-notice">⚠️ Connect wallet first</div>' : ''}
                             <div class="input-group">
-                                <label>Amount (USD)</label>
+                                <label>Amount per trade (USD)</label>
                                 <input type="number" id="usdAmount" step="0.01" value="10" placeholder="10.00" 
                                     ${!walletAddress ? 'disabled' : ''} oninput="updateAmountDisplay()">
                                 <div class="eth-equivalent" id="ethEquivalent">≈ ${(10/ethPrice).toFixed(4)} ETH</div>
                             </div>
+                            <div class="input-row">
+                                <div class="input-group">
+                                    <label>Cycles (כמות פעמים)</label>
+                                    <input type="number" id="cycles" min="1" value="5" ${!walletAddress ? 'disabled' : ''}>
+                                </div>
+                                <div class="input-group">
+                                    <label>Delay (שניות בין פעולות)</label>
+                                    <input type="number" id="delay" min="1" value="10" ${!walletAddress ? 'disabled' : ''}>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>Bot Mode</label>
+                                <select id="botMode" ${!walletAddress ? 'disabled' : ''}>
+                                    <option value="both">BUY + SELL (Both)</option>
+                                    <option value="buy">BUY Only</option>
+                                    <option value="sell">SELL Only</option>
+                                </select>
+                            </div>
+                            <div id="botStatus" style="display: none;" class="bot-status"></div>
+                            <div class="trade-buttons">
+                                <button class="bot" onclick="startBot()" id="startBotBtn" ${!walletAddress ? 'disabled' : ''}>
+                                    🚀 START BOT
+                                </button>
+                                <button class="stop" onclick="stopBot()" id="stopBotBtn" disabled>
+                                    ⛔ STOP BOT
+                                </button>
+                            </div>
+                            <div id="botLog" class="bot-log" style="display: none;"></div>
+                        </div>
+                        
+                        <div class="trading-controls">
+                            <h3>💰 Manual Trading</h3>
                             <div class="trade-buttons">
                                 <button class="buy" onclick="executeTrade('buy')" id="buyBtn" ${!walletAddress ? 'disabled' : ''}>
                                     🟢 BUY ${tokenName}
@@ -392,9 +466,6 @@
                                     🔴 SELL ${tokenName}
                                 </button>
                             </div>
-                            <p style="margin-top: 15px; opacity: 0.6; font-size: 14px; text-align: center;">
-                                ⚠️ Real Uniswap V3 swaps on ${config.chainName}
-                            </p>
                         </div>
                     </div>
                 `;
@@ -403,7 +474,78 @@
             }
         }
 
-        async function executeTrade(action) {
+        async function startBot() {
+            if (botRunning) return;
+            
+            botRunning = true;
+            botStopped = false;
+            const cycles = parseInt(document.getElementById('cycles').value);
+            const delay = parseInt(document.getElementById('delay').value) * 1000;
+            const mode = document.getElementById('botMode').value;
+            
+            document.getElementById('startBotBtn').disabled = true;
+            document.getElementById('stopBotBtn').disabled = false;
+            document.getElementById('botLog').style.display = 'block';
+            
+            const statusDiv = document.getElementById('botStatus');
+            statusDiv.style.display = 'block';
+            
+            logBot(`🚀 Bot started: ${cycles} cycles, ${delay/1000}s delay, mode: ${mode.toUpperCase()}`);
+            
+            for (let i = 1; i <= cycles; i++) {
+                if (botStopped) {
+                    logBot('⛔ Bot stopped by user');
+                    break;
+                }
+                
+                statusDiv.textContent = `🔄 Running cycle ${i}/${cycles}...`;
+                logBot(`--- Cycle ${i}/${cycles} ---`);
+                
+                try {
+                    if (mode === 'buy' || mode === 'both') {
+                        await executeTrade('buy', true);
+                        if (botStopped) break;
+                        if (mode === 'both') await sleep(delay);
+                    }
+                    
+                    if (mode === 'sell' || mode === 'both') {
+                        if (botStopped) break;
+                        await executeTrade('sell', true);
+                    }
+                    
+                    if (i < cycles && !botStopped) {
+                        logBot(`⏳ Waiting ${delay/1000}s...`);
+                        await sleep(delay);
+                    }
+                } catch (error) {
+                    logBot(`❌ Error in cycle ${i}: ${error.message}`);
+                }
+            }
+            
+            botRunning = false;
+            document.getElementById('startBotBtn').disabled = false;
+            document.getElementById('stopBotBtn').disabled = true;
+            
+            if (!botStopped) {
+                statusDiv.textContent = '✅ Bot completed all cycles!';
+                logBot('✅ Bot finished successfully');
+            } else {
+                statusDiv.textContent = '⛔ Bot stopped';
+            }
+            
+            await updateDashboard(currentToken);
+        }
+
+        function stopBot() {
+            botStopped = true;
+            logBot('⛔ Stop requested...');
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function executeTrade(action, fromBot = false) {
             if (!signer) {
                 alert('Connect wallet first');
                 return;
@@ -418,14 +560,19 @@
 
             const network = await provider.getNetwork();
             if (network.chainId !== config.chainId) {
-                alert(`Switch to ${config.chainName}`);
+                if (!fromBot) alert(`Switch to ${config.chainName}`);
                 await switchNetwork(config.chainId);
                 return;
             }
 
-            const btn = document.getElementById(action === 'buy' ? 'buyBtn' : 'sellBtn');
-            const originalText = btn.textContent;
-            btn.disabled = true;
+            if (!fromBot) {
+                const btn = document.getElementById(action === 'buy' ? 'buyBtn' : 'sellBtn');
+                const originalText = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = action === 'buy' ? '⏳ Buying...' : '⏳ Selling...';
+            } else {
+                logBot(`${action === 'buy' ? '🟢' : '🔴'} ${action.toUpperCase()} $${usdAmount}...`);
+            }
 
             try {
                 const ethAmount = usdAmount / ethPrice;
@@ -434,7 +581,6 @@
                 const deadline = Math.floor(Date.now() / 1000) + 600;
 
                 if (action === 'buy') {
-                    btn.textContent = '⏳ Buying...';
                     const params = {
                         tokenIn: WETH[config.chainId],
                         tokenOut: config.address,
@@ -447,7 +593,11 @@
                     };
                     const tx = await router.exactInputSingle(params, { value: amountInWei });
                     await tx.wait();
-                    alert(`✅ Bought $${usdAmount} worth!\nTx: ${tx.hash}`);
+                    if (fromBot) {
+                        logBot(`✅ BUY success: ${tx.hash.slice(0,10)}...`);
+                    } else {
+                        alert(`✅ Bought!\nTx: ${tx.hash}`);
+                    }
                 } else {
                     const token = new ethers.Contract(config.address, ERC20_ABI, signer);
                     const tokenAmount = usdAmount / currentPrice;
@@ -456,18 +606,16 @@
                     
                     const balance = await token.balanceOf(walletAddress);
                     if (balance.lt(amountIn)) {
-                        alert('Insufficient token balance');
-                        return;
+                        throw new Error('Insufficient token balance');
                     }
 
                     const allowance = await token.allowance(walletAddress, config.router);
                     if (allowance.lt(amountIn)) {
-                        btn.textContent = '⏳ Approving...';
+                        if (fromBot) logBot('⏳ Approving tokens...');
                         const approveTx = await token.approve(config.router, ethers.constants.MaxUint256);
                         await approveTx.wait();
                     }
 
-                    btn.textContent = '⏳ Selling...';
                     const params = {
                         tokenIn: config.address,
                         tokenOut: WETH[config.chainId],
@@ -480,15 +628,26 @@
                     };
                     const tx = await router.exactInputSingle(params);
                     await tx.wait();
-                    alert(`✅ Sold $${usdAmount} worth!\nTx: ${tx.hash}`);
+                    if (fromBot) {
+                        logBot(`✅ SELL success: ${tx.hash.slice(0,10)}...`);
+                    } else {
+                        alert(`✅ Sold!\nTx: ${tx.hash}`);
+                    }
                 }
-                await updateDashboard(currentToken);
             } catch (error) {
                 console.error('Trade error:', error);
-                alert('Failed: ' + (error.reason || error.message));
+                if (fromBot) {
+                    logBot(`❌ ${action.toUpperCase()} failed: ${error.reason || error.message}`);
+                    throw error;
+                } else {
+                    alert('Failed: ' + (error.reason || error.message));
+                }
             } finally {
-                btn.disabled = false;
-                btn.textContent = originalText;
+                if (!fromBot) {
+                    const btn = document.getElementById(action === 'buy' ? 'buyBtn' : 'sellBtn');
+                    btn.disabled = false;
+                    btn.textContent = action === 'buy' ? '🟢 BUY' : '🔴 SELL';
+                }
             }
         }
 
