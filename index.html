@@ -50,18 +50,10 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
-        button.buy {
-            background: #10b981;
-        }
-        button.buy:hover:not(:disabled) {
-            background: #059669;
-        }
-        button.sell {
-            background: #ef4444;
-        }
-        button.sell:hover:not(:disabled) {
-            background: #dc2626;
-        }
+        button.buy { background: #10b981; }
+        button.buy:hover:not(:disabled) { background: #059669; }
+        button.sell { background: #ef4444; }
+        button.sell:hover:not(:disabled) { background: #dc2626; }
         .dashboard {
             background: rgba(26, 31, 58, 0.8);
             border-radius: 16px;
@@ -99,9 +91,7 @@
             padding: 30px;
             margin-top: 30px;
         }
-        .input-group {
-            margin: 20px 0;
-        }
+        .input-group { margin: 20px 0; }
         .input-group label {
             display: block;
             margin-bottom: 8px;
@@ -121,9 +111,7 @@
             gap: 15px;
             margin-top: 20px;
         }
-        .trade-buttons button {
-            flex: 1;
-        }
+        .trade-buttons button { flex: 1; }
         .wallet-notice {
             background: rgba(255, 193, 7, 0.1);
             border: 1px solid rgba(255, 193, 7, 0.3);
@@ -131,6 +119,14 @@
             padding: 15px;
             margin-bottom: 20px;
             text-align: center;
+        }
+        .network-badge {
+            display: inline-block;
+            background: rgba(124, 58, 237, 0.2);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -157,20 +153,50 @@
         let priceInterval = null;
         let walletAddress = null;
         let signer = null;
+        let provider = null;
 
-        const RAIN_ADDRESS = '0x0000000000000000000000000000000000000000';
-        const GEMS_ADDRESS = '0x0000000000000000000000000000000000000000';
-        const UNISWAP_ROUTER = '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45';
+        // Token configurations
+        const TOKENS = {
+            'rain': {
+                address: '0x25118290e6a5f4139381d072181157035864099d',
+                chainId: 42161, // Arbitrum One
+                chainName: 'Arbitrum One',
+                router: '0xE592427A0AEce92De3Edee1F18E0157C05861564', // Uniswap V3 SwapRouter
+                rpcUrl: 'https://arb1.arbitrum.io/rpc'
+            },
+            'gems-vip': {
+                address: '0x3010ccb5419f1ef26d40a7cd3f0d707a0fa127dc',
+                chainId: 1, // Ethereum Mainnet
+                chainName: 'Ethereum',
+                router: '0xE592427A0AEce92De3Edee1F18E0157C05861564', // Uniswap V3 SwapRouter
+                rpcUrl: 'https://eth.llamarpc.com'
+            }
+        };
+
+        const WETH = {
+            1: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // Ethereum
+            42161: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1' // Arbitrum
+        };
+
+        const ERC20_ABI = [
+            'function approve(address spender, uint256 amount) returns (bool)',
+            'function allowance(address owner, address spender) view returns (uint256)',
+            'function balanceOf(address account) view returns (uint256)'
+        ];
+
+        const ROUTER_ABI = [
+            'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) payable returns (uint256 amountOut)'
+        ];
 
         async function connectWallet() {
             if (typeof window.ethereum !== 'undefined') {
                 try {
-                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
                     await provider.send('eth_requestAccounts', []);
                     signer = provider.getSigner();
                     walletAddress = await signer.getAddress();
                     document.getElementById('wallet-status').innerHTML = 
-                        `<span style="color: #10b981;">✓ Connected: ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}</span>`;
+                        `<span style="color: #10b981;">✓ ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}</span>`;
                     if (currentToken) {
                         await updateDashboard(currentToken);
                     }
@@ -179,6 +205,21 @@
                 }
             } else {
                 alert('Please install MetaMask from metamask.io');
+            }
+        }
+
+        async function switchNetwork(chainId) {
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0x' + chainId.toString(16) }],
+                });
+                return true;
+            } catch (error) {
+                if (error.code === 4902) {
+                    alert(`Please add ${TOKENS[currentToken].chainName} network to MetaMask`);
+                }
+                return false;
             }
         }
 
@@ -204,6 +245,7 @@
                 const tokenData = data[tokenId];
                 if (!tokenData) throw new Error('Token data not available');
 
+                const config = TOKENS[tokenId];
                 const tokenName = tokenId === 'rain' ? 'RAIN' : 'GEMS-VIP';
                 const price = tokenData.usd || 0;
                 const change24h = tokenData.usd_24h_change || 0;
@@ -212,7 +254,7 @@
 
                 dashboard.innerHTML = `
                     <div class="dashboard">
-                        <h2>${tokenName} Dashboard</h2>
+                        <h2>${tokenName} Dashboard <span class="network-badge">⛓️ ${config.chainName}</span></h2>
                         <div class="price-card">
                             <div class="label">Current Price</div>
                             <div class="price">$${price.toFixed(6)}</div>
@@ -250,7 +292,7 @@
                                 </button>
                             </div>
                             <p style="margin-top: 15px; opacity: 0.6; font-size: 14px; text-align: center;">
-                                ⚠️ Demo mode. Replace token addresses before real trading.
+                                ⚠️ Real Uniswap V3 swaps. Check slippage and gas before confirming.
                             </p>
                         </div>
                     </div>
@@ -262,14 +304,23 @@
 
         async function executeTrade(action) {
             if (!signer) {
-                alert('Please connect wallet first (click Connect Wallet button at the top)');
+                alert('Please connect wallet first');
                 return;
             }
 
+            const config = TOKENS[currentToken];
             const amount = document.getElementById('amount').value;
             if (!amount || parseFloat(amount) <= 0) {
                 alert('Please enter a valid amount');
                 return;
+            }
+
+            // Check network
+            const network = await provider.getNetwork();
+            if (network.chainId !== config.chainId) {
+                alert(`Please switch to ${config.chainName} in MetaMask`);
+                const switched = await switchNetwork(config.chainId);
+                if (!switched) return;
             }
 
             const btn = document.getElementById(action === 'buy' ? 'buyBtn' : 'sellBtn');
@@ -278,23 +329,71 @@
             btn.textContent = action === 'buy' ? '⏳ Buying...' : '⏳ Selling...';
 
             try {
-                const tokenAddress = currentToken === 'rain' ? RAIN_ADDRESS : GEMS_ADDRESS;
-                
-                // Demo alert
-                alert(`${action.toUpperCase()} order: ${amount} ETH\n\nToken: ${tokenAddress}\nRouter: ${UNISWAP_ROUTER}\n\n⚠️ This is demo mode. Add real swap logic here.`);
-                
+                const router = new ethers.Contract(config.router, ROUTER_ABI, signer);
+                const deadline = Math.floor(Date.now() / 1000) + 60 * 10; // 10 minutes
+                const amountIn = ethers.utils.parseEther(amount);
+
+                if (action === 'buy') {
+                    // ETH -> Token
+                    const params = {
+                        tokenIn: WETH[config.chainId],
+                        tokenOut: config.address,
+                        fee: 3000, // 0.3%
+                        recipient: walletAddress,
+                        deadline: deadline,
+                        amountIn: amountIn,
+                        amountOutMinimum: 0, // TODO: Add slippage protection
+                        sqrtPriceLimitX96: 0
+                    };
+                    
+                    const tx = await router.exactInputSingle(params, { value: amountIn });
+                    btn.textContent = '⏳ Confirming...';
+                    await tx.wait();
+                    alert(`✅ Buy successful!\nTx: ${tx.hash}`);
+                } else {
+                    // Token -> ETH (need approval first)
+                    const token = new ethers.Contract(config.address, ERC20_ABI, signer);
+                    const balance = await token.balanceOf(walletAddress);
+                    
+                    if (balance.lt(amountIn)) {
+                        alert('Insufficient token balance');
+                        return;
+                    }
+
+                    const allowance = await token.allowance(walletAddress, config.router);
+                    if (allowance.lt(amountIn)) {
+                        btn.textContent = '⏳ Approving...';
+                        const approveTx = await token.approve(config.router, ethers.constants.MaxUint256);
+                        await approveTx.wait();
+                    }
+
+                    const params = {
+                        tokenIn: config.address,
+                        tokenOut: WETH[config.chainId],
+                        fee: 3000,
+                        recipient: walletAddress,
+                        deadline: deadline,
+                        amountIn: amountIn,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    };
+
+                    btn.textContent = '⏳ Swapping...';
+                    const tx = await router.exactInputSingle(params);
+                    btn.textContent = '⏳ Confirming...';
+                    await tx.wait();
+                    alert(`✅ Sell successful!\nTx: ${tx.hash}`);
+                }
             } catch (error) {
-                alert('Transaction failed: ' + error.message);
+                console.error('Trade error:', error);
+                alert('Transaction failed: ' + (error.reason || error.message));
             } finally {
                 btn.disabled = false;
                 btn.textContent = originalText;
             }
         }
 
-        // Auto-select RAIN on load
-        window.addEventListener('load', () => { 
-            selectToken('rain'); 
-        });
+        window.addEventListener('load', () => { selectToken('rain'); });
     </script>
 </body>
 </html>
