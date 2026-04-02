@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: volume-bot-ui
+    env: static
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    staticPublishPath: ./build
+    pullRequestPreviewsEnabled: true
