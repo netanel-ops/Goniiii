@@ -171,7 +171,7 @@
             border: 1px solid rgba(124, 58, 237, 0.2);
             border-radius: 6px;
             padding: 15px;
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
             font-family: monospace;
             font-size: 13px;
@@ -180,6 +180,13 @@
         .bot-log div {
             padding: 5px 0;
             border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .info-box {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
         }
     </style>
 </head>
@@ -252,12 +259,12 @@
         }
 
         function loadSettings() {
-            currentToken = localStorage.getItem('volumeBot_token') || 'rain';
             return {
                 usdAmount: localStorage.getItem('volumeBot_usdAmount') || '10',
                 cycles: localStorage.getItem('volumeBot_cycles') || '5',
                 delay: localStorage.getItem('volumeBot_delay') || '10',
-                mode: localStorage.getItem('volumeBot_mode') || 'both'
+                mode: localStorage.getItem('volumeBot_mode') || 'both',
+                token: localStorage.getItem('volumeBot_token') || 'rain'
             };
         }
 
@@ -268,7 +275,7 @@
                 const entry = document.createElement('div');
                 entry.textContent = `[${time}] ${message}`;
                 log.insertBefore(entry, log.firstChild);
-                if (log.children.length > 20) log.removeChild(log.lastChild);
+                if (log.children.length > 30) log.removeChild(log.lastChild);
             }
         }
 
@@ -322,11 +329,12 @@
 
         function updateAmountDisplay() {
             saveSettings();
-            const usdAmount = document.getElementById('usdAmount').value;
-            const ethAmount = parseFloat(usdAmount) / ethPrice;
-            const tokenAmount = parseFloat(usdAmount) / currentPrice;
+            const usdAmount = parseFloat(document.getElementById('usdAmount').value);
+            if (!ethPrice || !currentPrice) return;
+            const ethAmount = usdAmount / ethPrice;
+            const tokenAmount = usdAmount / currentPrice;
             document.getElementById('ethEquivalent').textContent = 
-                `≈ ${ethAmount.toFixed(4)} ETH or ${tokenAmount.toFixed(2)} tokens`;
+                `≈ ${ethAmount.toFixed(4)} ETH or ${tokenAmount.toFixed(0)} tokens`;
         }
 
         async function getHoldings() {
@@ -447,17 +455,21 @@
                         
                         <div class="bot-controls">
                             <h3>🤖 Volume Bot</h3>
+                            <div class="info-box">
+                                ✨ <strong>One-Time Approval!</strong><br>
+                                הבוט יבקש ממך לאשר approve אחד לטוקן, ואז יריץ את כל ה-cycles בלי חתימות נוספות!
+                            </div>
                             ${!walletAddress ? '<div class="wallet-notice">⚠️ Connect wallet first</div>' : ''}
                             <div class="input-group">
                                 <label>Amount per trade (USD)</label>
                                 <input type="number" id="usdAmount" step="0.01" value="${settings.usdAmount}" placeholder="10.00" 
                                     ${!walletAddress ? 'disabled' : ''} oninput="updateAmountDisplay()">
-                                <div class="eth-equivalent" id="ethEquivalent">≈ ${(parseFloat(settings.usdAmount)/ethPrice).toFixed(4)} ETH</div>
+                                <div class="eth-equivalent" id="ethEquivalent">≈ ${ethPrice ? (parseFloat(settings.usdAmount)/ethPrice).toFixed(4) : '0.0000'} ETH</div>
                             </div>
                             <div class="input-row">
                                 <div class="input-group">
                                     <label>Cycles (כמות פעמים)</label>
-                                    <input type="number" id="cycles" min="1" value="${settings.cycles}" ${!walletAddress ? 'disabled' : ''} onchange="saveSettings()">
+                                    <input type="number" id="cycles" min="1" max="10" value="${settings.cycles}" ${!walletAddress ? 'disabled' : ''} onchange="saveSettings()">
                                 </div>
                                 <div class="input-group">
                                     <label>Delay (שניות בין פעולות)</label>
@@ -505,11 +517,19 @@
         async function startBot() {
             if (botRunning) return;
             
+            const config = TOKENS[currentToken];
+            const network = await provider.getNetwork();
+            if (network.chainId !== config.chainId) {
+                alert(`Please switch to ${config.chainName} in MetaMask first`);
+                return;
+            }
+            
             botRunning = true;
             botStopped = false;
             const cycles = parseInt(document.getElementById('cycles').value);
             const delay = parseInt(document.getElementById('delay').value) * 1000;
             const mode = document.getElementById('botMode').value;
+            const usdAmount = parseFloat(document.getElementById('usdAmount').value);
             
             document.getElementById('startBotBtn').disabled = true;
             document.getElementById('stopBotBtn').disabled = false;
@@ -518,24 +538,53 @@
             const statusDiv = document.getElementById('botStatus');
             statusDiv.style.display = 'block';
             
-            logBot(`🚀 Bot started: ${cycles} cycles, ${delay/1000}s delay, mode: ${mode.toUpperCase()}`);
+            logBot(`🚀 Bot started: ${cycles} cycles, ${delay/1000}s delay, $${usdAmount} per trade`);
             
+            // First: Approve tokens if mode includes SELL
+            if (mode === 'sell' || mode === 'both') {
+                try {
+                    statusDiv.textContent = '⏳ Approving tokens (one-time)...';
+                    logBot('⏳ Requesting token approval...');
+                    const token = new ethers.Contract(config.address, ERC20_ABI, signer);
+                    const allowance = await token.allowance(walletAddress, config.router);
+                    
+                    if (allowance.lt(ethers.constants.MaxUint256.div(2))) {
+                        const approveTx = await token.approve(config.router, ethers.constants.MaxUint256);
+                        logBot('⏳ Waiting for approval confirmation...');
+                        await approveTx.wait();
+                        logBot('✅ Token approved! Now bot will run without more approvals');
+                    } else {
+                        logBot('✅ Token already approved');
+                    }
+                } catch (error) {
+                    logBot(`❌ Approval failed: ${error.message}`);
+                    botRunning = false;
+                    document.getElementById('startBotBtn').disabled = false;
+                    document.getElementById('stopBotBtn').disabled = true;
+                    statusDiv.textContent = '❌ Approval failed';
+                    return;
+                }
+            }
+            
+            // Now run cycles without more approvals!
             for (let i = 1; i <= cycles; i++) {
                 if (botStopped) {
                     logBot('⛔ Bot stopped by user');
                     break;
                 }
                 
-                statusDiv.textContent = `🔄 Running cycle ${i}/${cycles}...`;
+                statusDiv.textContent = `🔄 Cycle ${i}/${cycles} - Running...`;
                 logBot(`--- Cycle ${i}/${cycles} ---`);
                 
                 try {
                     if (mode === 'buy' || mode === 'both') {
                         await executeTrade('buy', true);
                         if (botStopped) break;
-                        if (mode === 'both' && i < cycles) {
+                        
+                        if (mode === 'both') {
                             logBot(`⏳ Waiting ${delay/1000}s before SELL...`);
                             await sleep(delay);
+                            if (botStopped) break;
                         }
                     }
                     
@@ -548,7 +597,8 @@
                         await sleep(delay);
                     }
                 } catch (error) {
-                    logBot(`❌ Error in cycle ${i}: ${error.message}`);
+                    logBot(`❌ Cycle ${i} failed: ${error.message}`);
+                    // Continue to next cycle anyway
                 }
             }
             
@@ -557,8 +607,8 @@
             document.getElementById('stopBotBtn').disabled = true;
             
             if (!botStopped) {
-                statusDiv.textContent = '✅ Bot completed all cycles!';
-                logBot('✅ Bot finished successfully');
+                statusDiv.textContent = '✅ Bot completed!';
+                logBot(`✅ Bot finished ${cycles} cycles successfully`);
             } else {
                 statusDiv.textContent = '⛔ Bot stopped';
             }
@@ -568,7 +618,7 @@
 
         function stopBot() {
             botStopped = true;
-            logBot('⛔ Stop requested...');
+            logBot('⛔ Stop requested - will stop after current transaction...');
         }
 
         function sleep(ms) {
@@ -591,13 +641,11 @@
             const network = await provider.getNetwork();
             if (network.chainId !== config.chainId) {
                 if (!fromBot) alert(`Switch to ${config.chainName}`);
-                await switchNetwork(config.chainId);
                 return;
             }
 
             if (!fromBot) {
                 const btn = document.getElementById(action === 'buy' ? 'buyBtn' : 'sellBtn');
-                const originalText = btn.textContent;
                 btn.disabled = true;
                 btn.textContent = action === 'buy' ? '⏳ Buying...' : '⏳ Selling...';
             } else {
@@ -624,7 +672,7 @@
                     const tx = await router.exactInputSingle(params, { value: amountInWei });
                     await tx.wait();
                     if (fromBot) {
-                        logBot(`✅ BUY success: ${tx.hash.slice(0,10)}...`);
+                        logBot(`✅ BUY: ${tx.hash.slice(0,10)}...`);
                     } else {
                         alert(`✅ Bought!\nTx: ${tx.hash}`);
                     }
@@ -637,13 +685,6 @@
                     const balance = await token.balanceOf(walletAddress);
                     if (balance.lt(amountIn)) {
                         throw new Error('Insufficient token balance');
-                    }
-
-                    const allowance = await token.allowance(walletAddress, config.router);
-                    if (allowance.lt(amountIn)) {
-                        if (fromBot) logBot('⏳ Approving tokens...');
-                        const approveTx = await token.approve(config.router, ethers.constants.MaxUint256);
-                        await approveTx.wait();
                     }
 
                     const params = {
@@ -659,7 +700,7 @@
                     const tx = await router.exactInputSingle(params);
                     await tx.wait();
                     if (fromBot) {
-                        logBot(`✅ SELL success: ${tx.hash.slice(0,10)}...`);
+                        logBot(`✅ SELL: ${tx.hash.slice(0,10)}...`);
                     } else {
                         alert(`✅ Sold!\nTx: ${tx.hash}`);
                     }
@@ -684,7 +725,7 @@
         window.addEventListener('load', async () => { 
             await autoConnectWallet();
             const settings = loadSettings();
-            await selectToken(settings.token || 'rain');
+            await selectToken(settings.token);
         });
     </script>
 </body>
