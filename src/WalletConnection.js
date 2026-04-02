@@ -1,26 +1,12 @@
 import React from "react";
-import { RainbowKitProvider, ConnectButton } from "@rainbow-me/rainbowkit";
-import { WagmiConfig, createClient, configureChains, chain } from "wagmi";
-import { publicProvider } from "wagmi/providers/public";
-import "@rainbow-me/rainbowkit/styles.css";
-
-const { chains, provider } = configureChains(
-  [chain.mainnet, chain.arbitrum],
-  [publicProvider()]
-);
-
-const client = createClient({
-  autoConnect: true,
-  provider
-});
 
 function WalletConnection() {
   return (
-    <WagmiConfig client={client}>
-      <RainbowKitProvider chains={chains}>
-        <ConnectButton />
-      </RainbowKitProvider>
-    </WagmiConfig>
+    <div style={{padding: "10px", background: "#f0f0f0", borderRadius: "5px"}}>
+      <button style={{padding: "10px 20px", background: "#007bff", color: "white", border: "none", borderRadius: "5px", cursor: "pointer"}}>
+        Connect Wallet (Coming Soon)
+      </button>
+    </div>
   );
 }
 
