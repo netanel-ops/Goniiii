@@ -46,10 +46,7 @@
             background: #7c3aed;
             box-shadow: 0 0 30px rgba(124, 58, 237, 0.6);
         }
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         button.buy { background: #10b981; }
         button.buy:hover:not(:disabled) { background: #059669; }
         button.sell { background: #ef4444; }
@@ -85,18 +82,14 @@
         }
         .stat-value { font-size: 1.8rem; font-weight: bold; color: #7c3aed; }
         .stat-label { margin-top: 8px; opacity: 0.7; }
-        .trading-controls {
+        .trading-controls, .holdings {
             background: rgba(255,255,255,0.03);
             border-radius: 12px;
             padding: 30px;
             margin-top: 30px;
         }
         .input-group { margin: 20px 0; }
-        .input-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-        }
+        .input-group label { display: block; margin-bottom: 8px; font-weight: 500; }
         .input-group input {
             width: 100%;
             padding: 12px;
@@ -106,11 +99,7 @@
             color: white;
             font-size: 16px;
         }
-        .trade-buttons {
-            display: flex;
-            gap: 15px;
-            margin-top: 20px;
-        }
+        .trade-buttons { display: flex; gap: 15px; margin-top: 20px; }
         .trade-buttons button { flex: 1; }
         .wallet-notice {
             background: rgba(255, 193, 7, 0.1);
@@ -127,6 +116,33 @@
             border-radius: 6px;
             font-size: 14px;
             margin-top: 10px;
+        }
+        .contract-address {
+            background: rgba(10, 14, 39, 0.8);
+            padding: 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 14px;
+            margin: 15px 0;
+            word-break: break-all;
+            border: 1px solid rgba(124, 58, 237, 0.2);
+        }
+        .holdings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .holding-card {
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .holding-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #10b981;
+            margin: 10px 0;
         }
     </style>
 </head>
@@ -155,33 +171,33 @@
         let signer = null;
         let provider = null;
 
-        // Token configurations
         const TOKENS = {
             'rain': {
                 address: '0x25118290e6a5f4139381d072181157035864099d',
-                chainId: 42161, // Arbitrum One
+                chainId: 42161,
                 chainName: 'Arbitrum One',
-                router: '0xE592427A0AEce92De3Edee1F18E0157C05861564', // Uniswap V3 SwapRouter
+                router: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
                 rpcUrl: 'https://arb1.arbitrum.io/rpc'
             },
             'gems-vip': {
                 address: '0x3010ccb5419f1ef26d40a7cd3f0d707a0fa127dc',
-                chainId: 1, // Ethereum Mainnet
+                chainId: 1,
                 chainName: 'Ethereum',
-                router: '0xE592427A0AEce92De3Edee1F18E0157C05861564', // Uniswap V3 SwapRouter
+                router: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
                 rpcUrl: 'https://eth.llamarpc.com'
             }
         };
 
         const WETH = {
-            1: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // Ethereum
-            42161: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1' // Arbitrum
+            1: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+            42161: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'
         };
 
         const ERC20_ABI = [
             'function approve(address spender, uint256 amount) returns (bool)',
             'function allowance(address owner, address spender) view returns (uint256)',
-            'function balanceOf(address account) view returns (uint256)'
+            'function balanceOf(address account) view returns (uint256)',
+            'function decimals() view returns (uint8)'
         ];
 
         const ROUTER_ABI = [
@@ -233,9 +249,39 @@
             priceInterval = setInterval(() => updateDashboard(tokenId), 5000);
         }
 
+        async function getHoldings() {
+            if (!walletAddress || !provider) return null;
+            
+            try {
+                const config = TOKENS[currentToken];
+                const network = await provider.getNetwork();
+                
+                if (network.chainId !== config.chainId) {
+                    return { needsSwitch: true };
+                }
+
+                const token = new ethers.Contract(config.address, ERC20_ABI, provider);
+                const [tokenBalance, ethBalance, decimals] = await Promise.all([
+                    token.balanceOf(walletAddress),
+                    provider.getBalance(walletAddress),
+                    token.decimals()
+                ]);
+
+                return {
+                    tokenBalance: ethers.utils.formatUnits(tokenBalance, decimals),
+                    ethBalance: ethers.utils.formatEther(ethBalance),
+                    needsSwitch: false
+                };
+            } catch (error) {
+                console.error('Holdings error:', error);
+                return null;
+            }
+        }
+
         async function updateDashboard(tokenId) {
             const dashboard = document.getElementById('dashboard');
             dashboard.style.display = 'block';
+            
             try {
                 const response = await fetch(
                     `https://pro-api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true`,
@@ -252,9 +298,43 @@
                 const volume24h = tokenData.usd_24h_vol || 0;
                 const marketCap = tokenData.usd_market_cap || 0;
 
+                const holdings = await getHoldings();
+
+                let holdingsHTML = '';
+                if (walletAddress) {
+                    if (holdings && holdings.needsSwitch) {
+                        holdingsHTML = `
+                            <div class="holdings">
+                                <h3>💼 Your Holdings</h3>
+                                <div class="wallet-notice">⚠️ Switch to ${config.chainName} to see your holdings</div>
+                            </div>
+                        `;
+                    } else if (holdings) {
+                        holdingsHTML = `
+                            <div class="holdings">
+                                <h3>💼 Your Holdings</h3>
+                                <div class="holdings-grid">
+                                    <div class="holding-card">
+                                        <div class="stat-label">${tokenName} Balance</div>
+                                        <div class="holding-value">${parseFloat(holdings.tokenBalance).toFixed(4)}</div>
+                                        <div class="stat-label" style="opacity: 0.6;">≈ $${(parseFloat(holdings.tokenBalance) * price).toFixed(2)}</div>
+                                    </div>
+                                    <div class="holding-card">
+                                        <div class="stat-label">ETH Balance</div>
+                                        <div class="holding-value">${parseFloat(holdings.ethBalance).toFixed(4)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+
                 dashboard.innerHTML = `
                     <div class="dashboard">
                         <h2>${tokenName} Dashboard <span class="network-badge">⛓️ ${config.chainName}</span></h2>
+                        <div class="contract-address">
+                            <strong>Contract:</strong> ${config.address}
+                        </div>
                         <div class="price-card">
                             <div class="label">Current Price</div>
                             <div class="price">$${price.toFixed(6)}</div>
@@ -262,6 +342,7 @@
                                 ${change24h >= 0 ? '▲' : '▼'} ${Math.abs(change24h).toFixed(2)}% (24h)
                             </div>
                         </div>
+                        ${holdingsHTML}
                         <div class="stats">
                             <div class="stat-card">
                                 <div class="stat-value">$${(volume24h / 1000000).toFixed(2)}M</div>
@@ -315,7 +396,6 @@
                 return;
             }
 
-            // Check network
             const network = await provider.getNetwork();
             if (network.chainId !== config.chainId) {
                 alert(`Please switch to ${config.chainName} in MetaMask`);
@@ -330,19 +410,18 @@
 
             try {
                 const router = new ethers.Contract(config.router, ROUTER_ABI, signer);
-                const deadline = Math.floor(Date.now() / 1000) + 60 * 10; // 10 minutes
+                const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
                 const amountIn = ethers.utils.parseEther(amount);
 
                 if (action === 'buy') {
-                    // ETH -> Token
                     const params = {
                         tokenIn: WETH[config.chainId],
                         tokenOut: config.address,
-                        fee: 3000, // 0.3%
+                        fee: 3000,
                         recipient: walletAddress,
                         deadline: deadline,
                         amountIn: amountIn,
-                        amountOutMinimum: 0, // TODO: Add slippage protection
+                        amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
                     };
                     
@@ -350,8 +429,8 @@
                     btn.textContent = '⏳ Confirming...';
                     await tx.wait();
                     alert(`✅ Buy successful!\nTx: ${tx.hash}`);
+                    await updateDashboard(currentToken);
                 } else {
-                    // Token -> ETH (need approval first)
                     const token = new ethers.Contract(config.address, ERC20_ABI, signer);
                     const balance = await token.balanceOf(walletAddress);
                     
@@ -383,6 +462,7 @@
                     btn.textContent = '⏳ Confirming...';
                     await tx.wait();
                     alert(`✅ Sell successful!\nTx: ${tx.hash}`);
+                    await updateDashboard(currentToken);
                 }
             } catch (error) {
                 console.error('Trade error:', error);
