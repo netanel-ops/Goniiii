@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMS-VIP Volume Bot - בוט נפח GEMS-VIP</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #a8edea;
+            margin-bottom: 10px;
+        }
+        
+        .wallet-section {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            width: 100%;
+            margin: 5px 0;
+        }
+        
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+        }
+        
+        .control-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .input-group {
+            margin: 15px 0;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-weight: bold;
+        }
+        
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #a8edea;
+            margin: 10px 0;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .log-section {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 5px;
+            background: #f8f9fa;
+        }
+        
+        .log-success {
+            border-right: 4px solid #4caf50;
+        }
+        
+        .log-error {
+            border-right: 4px solid #f44336;
+        }
+        
+        .log-info {
+            border-right: 4px solid #2196f3;
+        }
+        
+        .price-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        
+        .price-display .price {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #a8edea;
+        }
+        
+        .connected-badge {
+            display: inline-block;
+            background: #4caf50;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        
+        .disconnected-badge {
+            display: inline-block;
+            background: #f44336;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💎 GEMS-VIP Volume Bot</h1>
+            <p>Ethereum Mainnet</p>
+            <a href="index.html" style="color: #a8edea; text-decoration: none;">← חזרה לדף הבית</a>
+        </div>
+        
+        <div class="wallet-section">
+            <h3>חיבור ארנק</h3>
+            <div id="walletStatus" style="margin: 10px 0;">
+                <span class="disconnected-badge">לא מחובר</span>
+            </div>
+            <div id="walletAddress" style="margin: 10px 0; color: #666;"></div>
+            <button class="btn" id="connectBtn" onclick="connectWallet()">חבר ארנק MetaMask</button>
+            <button class="btn btn-danger" id="disconnectBtn" onclick="disconnectWallet()" style="display: none;">נתק ארנק</button>
+        </div>
+        
+        <div class="price-display">
+            <div class="stat-label">מחיר GEMS-VIP נוכחי</div>
+            <div class="price" id="currentPrice">טוען...</div>
+            <div class="stat-label" style="font-size: 0.8em; margin-top: 5px;" id="priceUpdate">מעדכן מחיר...</div>
+        </div>
+        
+        <div class="control-panel">
+            <h3>הגדרות בוט</h3>
+            
+            <div class="input-group">
+                <label>סכום למסחר (USD):</label>
+                <input type="number" id="amountUSD" value="10" min="1" step="1">
+            </div>
+            
+            <div class="input-group">
+                <label>מספר מחזורים:</label>
+                <input type="number" id="cycles" value="10" min="1">
+            </div>
+            
+            <div class="input-group">
+                <label>השהיה בין עסקאות (שניות):</label>
+                <input type="number" id="delay" value="30" min="10">
+            </div>
+            
+            <div class="input-group">
+                <label>מצב מסחר:</label>
+                <select id="tradeMode">
+                    <option value="buy-sell">קנייה ומכירה</option>
+                    <option value="buy-only">קנייה בלבד</option>
+                    <option value="sell-only">מכירה בלבד</option>
+                </select>
+            </div>
+            
+            <button class="btn" id="startBtn" onclick="startBot()" disabled>התחל בוט</button>
+            <button class="btn btn-danger" id="stopBtn" onclick="stopBot()" style="display: none;">עצור בוט</button>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">מחזור נוכחי</div>
+                <div class="stat-value" id="currentCycle">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">עסקאות הושלמו</div>
+                <div class="stat-value" id="completedTrades">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">נפח כולל (USD)</div>
+                <div class="stat-value" id="totalVolume">$0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">סטטוס</div>
+                <div class="stat-value" id="botStatus" style="font-size: 1.2em;">מוכן</div>
+            </div>
+        </div>
+        
+        <div class="log-section">
+            <h3>לוג פעולות</h3>
+            <div id="logContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            GEMS_ADDRESS: '0x3010ccb5419f1ef26d40a7cd3f0d707a0fa127dc',
+            WETH_ADDRESS: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+            COINGECKO_API_KEY: 'CG-Qa4xRCrDuHn2232ArjgSwA8g',
+            COINGECKO_ID: 'gems-vip',
+            CHAIN_ID: 1, // Ethereum Mainnet
+            UNISWAP_ROUTER: '0xE592427A0AEce92De3Edee1F18E0157C05861564', // Uniswap V3 Router
+            RPC_URL: 'https://eth.llamarpc.com'
+        };
+
+        let provider, signer, walletAddress;
+        let botRunning = false;
+        let currentCycle = 0;
+        let completedTrades = 0;
+        let totalVolume = 0;
+        let gemsPrice = 0;
+        let priceUpdateInterval;
+
+        // ERC20 ABI (minimal)
+        const ERC20_ABI = [
+            "function approve(address spender, uint256 amount) external returns (bool)",
+            "function balanceOf(address account) external view returns (uint256)",
+            "function decimals() external view returns (uint8)",
+            "function allowance(address owner, address spender) external view returns (uint256)"
+        ];
+
+        // Uniswap V3 Router ABI (minimal)
+        const ROUTER_ABI = [
+            "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)"
+        ];
+
+        // Auto-connect on page load
+        window.addEventListener('load', async () => {
+            const savedAddress = localStorage.getItem('walletAddress');
+            if (savedAddress && typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                    if (accounts.length > 0 && accounts[0].toLowerCase() === savedAddress.toLowerCase()) {
+                        await connectWallet();
+                        addLog('ארנק חובר מחדש אוטומטית', 'info');
+                    }
+                } catch (error) {
+                    console.error('Auto-connect failed:', error);
+                }
+            }
+            updatePrice(); // Initial price fetch
+            startPriceUpdates();
+        });
+
+        async function connectWallet() {
+            try {
+                if (typeof window.ethereum === 'undefined') {
+                    alert('אנא התקן את MetaMask!');
+                    return;
+                }
+
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                signer = provider.getSigner();
+                walletAddress = await signer.getAddress();
+
+                // Check if on correct network
+                const network = await provider.getNetwork();
+                if (network.chainId !== CONFIG.CHAIN_ID) {
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x' + CONFIG.CHAIN_ID.toString(16) }],
+                        });
+                    } catch (switchError) {
+                        alert('אנא החלף לרשת Ethereum Mainnet');
+                        return;
+                    }
+                }
+
+                // Save to localStorage
+                localStorage.setItem('walletAddress', walletAddress);
+
+                document.getElementById('walletStatus').innerHTML = '<span class="connected-badge">מחובר</span>';
+                document.getElementById('walletAddress').textContent = `כתובת: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('disconnectBtn').style.display = 'block';
+                document.getElementById('startBtn').disabled = false;
+
+                addLog('ארנק מחובר בהצלחה!', 'success');
+            } catch (error) {
+                console.error('Connection error:', error);
+                addLog('שגיאה בחיבור ארנק: ' + error.message, 'error');
+            }
+        }
+
+        function disconnectWallet() {
+            localStorage.removeItem('walletAddress');
+            provider = null;
+            signer = null;
+            walletAddress = null;
+
+            document.getElementById('walletStatus').innerHTML = '<span class="disconnected-badge">לא מחובר</span>';
+            document.getElementById('walletAddress').textContent = '';
+            document.getElementById('connectBtn').style.display = 'block';
+            document.getElementById('disconnectBtn').style.display = 'none';
+            document.getElementById('startBtn').disabled = true;
+
+            addLog('ארנק נותק', 'info');
+        }
+
+        async function updatePrice() {
+            try {
+                const response = await fetch(
+                    `https://pro-api.coingecko.com/api/v3/simple/price?ids=${CONFIG.COINGECKO_ID}&vs_currencies=usd`,
+                    {
+                        headers: {
+                            'x-cg-pro-api-key': CONFIG.COINGECKO_API_KEY
+                        }
+                    }
+                );
+                const data = await response.json();
+                gemsPrice = data[CONFIG.COINGECKO_ID]?.usd || 0;
+                document.getElementById('currentPrice').textContent = `$${gemsPrice.toFixed(6)}`;
+                
+                const now = new Date().toLocaleTimeString('he-IL');
+                document.getElementById('priceUpdate').textContent = `עודכן: ${now}`;
+            } catch (error) {
+                console.error('Price fetch error:', error);
+                document.getElementById('currentPrice').textContent = 'שגיאה בטעינה';
+            }
+        }
+
+        function startPriceUpdates() {
+            // Update price every 60 seconds
+            priceUpdateInterval = setInterval(updatePrice, 60000);
+        }
+
+        async function startBot() {
+            if (!walletAddress) {
+                alert('אנא חבר ארנק תחילה!');
+                return;
+            }
+
+            botRunning = true;
+            currentCycle = 0;
+            completedTrades = 0;
+            totalVolume = 0;
+
+            const cycles = parseInt(document.getElementById('cycles').value);
+            const delay = parseInt(document.getElementById('delay').value) * 1000;
+            const amountUSD = parseFloat(document.getElementById('amountUSD').value);
+            const mode = document.getElementById('tradeMode').value;
+
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'block';
+            document.getElementById('botStatus').textContent = 'פועל';
+
+            addLog(`בוט התחיל! ${cycles} מחזורים, $${amountUSD} לעסקה`, 'success');
+
+            for (let i = 0; i < cycles && botRunning; i++) {
+                currentCycle = i + 1;
+                document.getElementById('currentCycle').textContent = currentCycle;
+
+                try {
+                    if (mode === 'buy-sell' || mode === 'buy-only') {
+                        await executeTrade('buy', amountUSD);
+                    }
+
+                    if (botRunning && (mode === 'buy-sell' || mode === 'sell-only')) {
+                        await new Promise(resolve => setTimeout(resolve, delay / 2));
+                        if (botRunning) {
+                            await executeTrade('sell', amountUSD);
+                        }
+                    }
+
+                    if (botRunning && i < cycles - 1) {
+                        addLog(`ממתין ${delay / 1000} שניות לפני המחזור הבא...`, 'info');
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                } catch (error) {
+                    addLog(`שגיאה במחזור ${currentCycle}: ${error.message}`, 'error');
+                    if (!confirm('המשך למחזור הבא?')) {
+                        break;
+                    }
+                }
+            }
+
+            stopBot();
+        }
+
+        function stopBot() {
+            botRunning = false;
+            document.getElementById('startBtn').style.display = 'block';
+            document.getElementById('stopBtn').style.display = 'none';
+            document.getElementById('botStatus').textContent = 'מוכן';
+            addLog('בוט נעצר', 'info');
+        }
+
+        async function executeTrade(type, amountUSD) {
+            try {
+                addLog(`מבצע ${type === 'buy' ? 'קנייה' : 'מכירה'} של $${amountUSD}...`, 'info');
+
+                const router = new ethers.Contract(CONFIG.UNISWAP_ROUTER, ROUTER_ABI, signer);
+                
+                let tx;
+                if (type === 'buy') {
+                    // Buy GEMS with ETH
+                    const amountInWei = ethers.utils.parseEther((amountUSD / 3000).toFixed(18)); // Rough ETH estimate
+                    
+                    const params = {
+                        tokenIn: CONFIG.WETH_ADDRESS,
+                        tokenOut: CONFIG.GEMS_ADDRESS,
+                        fee: 3000,
+                        recipient: walletAddress,
+                        deadline: Math.floor(Date.now() / 1000) + 1200, // 20 minutes
+                        amountIn: amountInWei,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    };
+
+                    tx = await router.exactInputSingle(params, {
+                        value: amountInWei,
+                        gasLimit: 500000
+                    });
+                } else {
+                    // Sell GEMS for ETH
+                    const gemsContract = new ethers.Contract(CONFIG.GEMS_ADDRESS, ERC20_ABI, signer);
+                    const gemsBalance = await gemsContract.balanceOf(walletAddress);
+                    const amountToSell = gemsBalance.div(2); // Sell half
+
+                    // Check and approve if needed
+                    const allowance = await gemsContract.allowance(walletAddress, CONFIG.UNISWAP_ROUTER);
+                    if (allowance.lt(amountToSell)) {
+                        addLog('מאשר הוצאת טוקנים...', 'info');
+                        const approveTx = await gemsContract.approve(CONFIG.UNISWAP_ROUTER, ethers.constants.MaxUint256);
+                        await approveTx.wait();
+                    }
+
+                    const params = {
+                        tokenIn: CONFIG.GEMS_ADDRESS,
+                        tokenOut: CONFIG.WETH_ADDRESS,
+                        fee: 3000,
+                        recipient: walletAddress,
+                        deadline: Math.floor(Date.now() / 1000) + 1200,
+                        amountIn: amountToSell,
+                        amountOutMinimum: 0,
+                        sqrtPriceLimitX96: 0
+                    };
+
+                    tx = await router.exactInputSingle(params, { gasLimit: 500000 });
+                }
+
+                addLog('ממתין לאישור עסקה...', 'info');
+                const receipt = await tx.wait(2); // Wait for 2 confirmations
+
+                completedTrades++;
+                totalVolume += amountUSD;
+                document.getElementById('completedTrades').textContent = completedTrades;
+                document.getElementById('totalVolume').textContent = `$${totalVolume.toFixed(2)}`;
+
+                addLog(`✅ ${type === 'buy' ? 'קנייה' : 'מכירה'} הושלמה! Hash: ${receipt.transactionHash.slice(0, 10)}...`, 'success');
+            } catch (error) {
+                throw new Error(error.message);
+            }
+        }
+
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            const time = new Date().toLocaleTimeString('he-IL');
+            logEntry.textContent = `[${time}] ${message}`;
+            logContainer.insertBefore(logEntry, logContainer.firstChild);
+            
+            // Keep only last 50 logs
+            while (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+        }
+    </script>
+</body>
+</html>
