@@ -240,7 +240,10 @@
 
         const WETH_ABI = [
             'function withdraw(uint256 amount)',
-            'function balanceOf(address account) view returns (uint256)'
+            'function balanceOf(address account) view returns (uint256)',
+            'function deposit() payable',
+            'function approve(address spender, uint256 amount) returns (bool)',
+            'function allowance(address owner, address spender) view returns (uint256)'
         ];
 
         function logBot(message) {
@@ -635,8 +638,29 @@
                 const deadline = Math.floor(Date.now() / 1000) + 600;
 
                 if (action === 'buy') {
+                    // BUY: ETH -> WETH -> Token
+                    const wethAddress = WETH[config.chainId];
+                    const weth = new ethers.Contract(wethAddress, WETH_ABI, signer);
+                    
+                    // שלב 1: המרת ETH ל-WETH
+                    if (fromBot) logBot('⏳ Converting ETH -> WETH...');
+                    const depositTx = await weth.deposit({ value: amountInWei, gasLimit: 100000 });
+                    await depositTx.wait();
+                    if (fromBot) logBot(`✅ ETH -> WETH: ${depositTx.hash.slice(0,10)}...`);
+                    
+                    // שלב 2: אישור WETH לראוטר (רק פעם אחת)
+                    const allowance = await weth.allowance(walletAddress, config.router);
+                    if (allowance.lt(amountInWei)) {
+                        if (fromBot) logBot('⏳ Approving WETH (one-time)...');
+                        const approveTx = await weth.approve(config.router, ethers.constants.MaxUint256, { gasLimit: 100000 });
+                        await approveTx.wait();
+                        if (fromBot) logBot('✅ WETH approval granted');
+                    }
+                    
+                    // שלב 3: Swap WETH -> Token
+                    if (fromBot) logBot('⏳ Swapping WETH -> Token...');
                     const params = {
-                        tokenIn: WETH[config.chainId],
+                        tokenIn: wethAddress,
                         tokenOut: config.address,
                         fee: 10000,
                         recipient: walletAddress,
@@ -645,12 +669,12 @@
                         amountOutMinimum: 0,
                         sqrtPriceLimitX96: 0
                     };
-                    const tx = await router.exactInputSingle(params, { value: amountInWei, gasLimit: 500000 });
+                    const tx = await router.exactInputSingle(params, { gasLimit: 500000 });
                     await tx.wait();
                     if (fromBot) {
                         logBot(`✅ BUY complete: ${tx.hash.slice(0,10)}...`);
                     } else {
-                        alert(`✅ Bought!\nTx: ${tx.hash}`);
+                        alert(`✅ Bought!\nDeposit: ${depositTx.hash}\nSwap: ${tx.hash}`);
                     }
                 } else {
                     // SELL: Token -> WETH -> ETH
